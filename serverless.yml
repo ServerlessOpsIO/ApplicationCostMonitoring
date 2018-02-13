@@ -1,0 +1,189 @@
+service: aws-adm
+
+plugins:
+  - serverless-python-requirements
+  - serverless-iam-roles-per-function
+  - serverless-pseudo-parameters
+
+custom:
+  stage: "${opt:stage, env:SLS_STAGE, 'dev'}"
+  profile: "${opt:aws-profile, env:AWS_PROFILE, env:AWS_DEFAULT_PROFILE, 'default'}"
+  log_level: "${env:LOG_LEVEL, 'INFO'}"
+
+provider:
+  name: aws
+  profile: ${self:custom.profile}
+  stage: ${self:custom.stage}
+
+functions:
+  S3Decompress:
+    handler: handlers/s3-decompress.handler
+    description: "Decompress an S3 object and publish contents to an S3 bucket temporarily for processing."
+    runtime: python3.6
+    memorySize: 128
+    timeout: 300
+    environment:
+      LOG_LEVEL: ${self:custom.log_level}
+      DECOMPRESS_S3_BUCKET_NAME:
+        Ref: S3BucketAwsadmprimedecompressAWSAccountId
+    iamRoleStatements:
+      - Effect: "Allow"
+        Action:
+          - "S3:GetObject"
+        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}/*"
+      - Effect: "Allow"
+        Action:
+          - "S3:PutObject"
+        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-decompress-#{AWS::AccountId}/*"
+    events:
+      - s3:
+          bucket: "${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}"   # S3BucketAWSAccountIdbillingreportsprime
+          event: "s3:ObjectCreated:Put"
+          rules:
+            - suffix: ".gz"
+
+  LineItemPublish:
+    handler: handlers/line-item-publisher.handler
+    description: "Ingest an S3 object and publish line items."
+    runtime: python3.6
+    memorySize: 256
+    timeout: 300
+    environment:
+      LOG_LEVEL: ${self:custom.log_level}
+      AWS_SNS_TOPIC:
+        Ref: BillingRecordsSnsTopic
+    iamRoleStatements:
+      - Effect: "Allow"
+        Action:
+          - "S3:GetObject"
+        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-decompress-#{AWS::AccountId}/*"
+      - Effect: "Allow"
+        Action:
+          - "SNS:Publish"
+        Resource:
+          - Ref: BillingRecordsSnsTopic
+      - Effect: "Allow"
+        Action:
+          - "Lambda:InvokeFunction"
+        Resource: "arn:aws:lambda:${self:provider.region}:#{AWS::AccountId}:function:${self:service}-${self:provider.stage}-LineItemPublish"
+
+    events:
+      - s3:
+          bucket: "${self:service}-${self:provider.stage}-decompress-#{AWS::AccountId}"       # S3BucketAWSAccountIddecompressprime
+          event: "s3:ObjectCreated:Put"
+
+resources:
+  Resources:
+    BillingRecordsSnsTopic:
+      Type: "AWS::SNS::Topic"
+
+    SnsTopicPolicy:
+      Type: "AWS::SNS::TopicPolicy"
+      Properties:
+        PolicyDocument: {
+          "Version": "2008-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "*"
+              },
+              "Action": [
+                "SNS:GetTopicAttributes",
+                "SNS:SetTopicAttributes",
+                "SNS:AddPermission",
+                "SNS:RemovePermission",
+                "SNS:DeleteTopic",
+                "SNS:Subscribe",
+                "SNS:ListSubscriptionsByTopic",
+                "SNS:Publish",
+                "SNS:Receive"
+              ],
+              "Resource": {
+                "Fn::Join": [
+                  ":",
+                  [
+                    "arn:aws:sns",
+                    Ref: "AWS::Region",
+                    Ref: "AWS::AccountId",
+                    Fn::GetAtt: ["BillingRecordsSnsTopic", "TopicName"]
+                  ]
+                ]
+              },
+              "Condition": {
+                "StringEquals": {
+                  "AWS:SourceOwner": {
+                    "Ref": "AWS::AccountId"
+                  }
+                }
+              }
+            }
+          ]
+        }
+        Topics:
+          - Ref: BillingRecordsSnsTopic
+
+    SnsConfirmSubscriptionIamManagedPolicy:
+      Type: "AWS::IAM::ManagedPolicy"
+      Properties:
+        Description: "Confirm SNS topic subscription"
+        PolicyDocument: {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sns:ConfirmSubscription"
+              ],
+              "Resource": [
+                {
+                  "Ref": "BillingRecordsSnsTopic"
+                }
+              ]
+            }
+          ]
+        }
+
+    BillingS3BucketPolicy:
+      Type: "AWS::S3::BucketPolicy"
+      Properties:
+        Bucket:
+          Ref: S3BucketAwsadmprimebillingreportsAWSAccountId
+        PolicyDocument: {
+          "Version": "2008-10-17",
+          "Id": "Policy1335892530063",
+          "Statement": [
+            {
+              "Sid": "Stmt1335892150622",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "arn:aws:iam::386209384616:root"
+              },
+              "Action": [
+                "s3:GetBucketAcl",
+                "s3:GetBucketPolicy"
+              ],
+              "Resource": { "Fn::GetAtt": ["S3BucketAwsadmprimebillingreportsAWSAccountId", "Arn"] }
+            },
+            {
+              "Sid": "Stmt1335892526596",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "arn:aws:iam::386209384616:root"
+              },
+              "Action": [
+                "s3:PutObject"
+              ],
+              "Resource": { "Fn::Join": ["/", [{ "Fn::GetAtt": ["S3BucketAwsadmprimebillingreportsAWSAccountId", "Arn"] }, "*"]] }
+            }
+          ]
+        }
+
+  Outputs:
+    BillingReportS3BucketName:
+      Description: "S3 bucket where billing reports are delivered to."
+      Value:
+        Ref: S3BucketAwsadmprimebillingreportsAWSAccountId
+      Export:
+        Name: "${self:service}-${self:provider.stage}-BillingReportS3BucketName"
+
