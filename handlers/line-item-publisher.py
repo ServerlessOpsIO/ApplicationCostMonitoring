@@ -85,7 +85,8 @@ def _process_additional_items(arn, event, record_offset):
     resp = event.get('Records')[0][X_RECORD_OFFSET] = record_offset
     lambda_client.invoke(
         FunctionName=arn,
-        Payload=json.dumps(event)
+        Payload=json.dumps(event),
+        InvocationType='Event'
     )
 
     return resp
