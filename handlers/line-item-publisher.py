@@ -18,11 +18,23 @@ s3_client = boto3.client('s3')
 sns_client = boto3.client('sns')
 lambda_client = boto3.client('lambda')
 
-def _publish_sns_message(topic_arn, message):
+def _convert_empty_value_to_none(item):
+    '''Turn empty strings into None, etc.'''
+
+    # DynamoDB can't have empty strings but csv.DictReader earlier in system
+    # uses '' for empty fields.
+
+    for key, value in item.items():
+        if value == '':
+            item[key] = None
+    return item
+
+
+def _publish_sns_message(topic_arn, line_item):
     '''Publish message to SNS'''
     resp = sns_client.publish(
         TopicArn=topic_arn,
-        Message=message
+        Message=json.dumps(line_item)
     )
 
     return resp
@@ -36,6 +48,26 @@ def _get_s3_object(s3_bucket, s3_key):
     )
 
     return s3_object
+
+
+def _format_line_item(headers, line_item):
+    split_line_item = line_item.split(',')
+    item_dict = dict(zip(headers, split_line_item))
+    sanitized_item_dict = _convert_empty_value_to_none(item_dict)
+
+    final_dict = {}
+
+    for k, v in sanitized_item_dict.items():
+        key_list = k.split('/')
+        if len(key_list) > 1:
+            parent, child = key_list
+            if parent not in final_dict.keys():
+                final_dict[parent] = {}
+            final_dict[parent][child] = v
+        else:
+            final_dict[key_list[0]] = v
+
+    return final_dict
 
 
 def _process_additional_items(arn, event, record_offset):
@@ -52,15 +84,13 @@ def handler(event, context):
     _logger.info('S3 event received: {}'.format(json.dumps(event)))
     s3_bucket_name = event.get('Records')[0].get('s3').get('bucket').get('name')
     s3_object_name = event.get('Records')[0].get('s3').get('object').get('key')
-    record_offset=  event.get('Records')[0].get(X_RECORD_OFFSET, 0)
+    record_offset=  event.get('Records')[0].get(X_RECORD_OFFSET, 1)
 
     s3_object = _get_s3_object(s3_bucket_name, s3_object_name)
     s3_body_file = io.StringIO(s3_object.get('Body').read().decode())
 
-    # skip header line.
-    if record_offset == 0:
-        s3_body_file.readline()
-        record_offset += 1
+    # Get header so we can format messages.
+    record_headers = s3_body_file.readline().strip().split(',')
 
     sns_resp = []
     lambda_resp = None
@@ -68,11 +98,16 @@ def handler(event, context):
     line_items = s3_body_file.readlines()[record_offset:]
     len_line_items = len(line_items)
 
-    # NOTE: We c
+    # NOTE: We might decide to batch send multiple records at a time.  It's
+    # Worth a look after we have decne t metrics to understand tradeoffs.
     for line_item in line_items:
+        stripped_line_item = line_item.strip()
         _logger.info('Publishing line_item: {}'.format(record_offset))
-        _logger.debug('line_item data: {}'.format(line_item))
-        resp = _publish_sns_message(AWS_SNS_TOPIC, line_item)
+
+        line_item_json = _format_line_item(record_headers, stripped_line_item)
+        _logger.debug('message: {}'.format(json.dumps(line_item_json)))
+
+        resp = _publish_sns_message(AWS_SNS_TOPIC, line_item_json)
         _logger.debug(
             'Publish response for line_item {}: {}'.format(
                 record_offset, json.dumps(resp)
