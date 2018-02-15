@@ -67,11 +67,33 @@ functions:
         Action:
           - "Lambda:InvokeFunction"
         Resource: "arn:aws:lambda:${self:provider.region}:#{AWS::AccountId}:function:${self:service}-${self:provider.stage}-LineItemPublish"
-
     events:
       - s3:
           bucket: "${self:service}-${self:provider.stage}-decompress-#{AWS::AccountId}"       # S3BucketAWSAccountIddecompressprime
           event: "s3:ObjectCreated:Put"
+
+  S3BillingItemWriter:
+    handler: handlers/s3-billing-item-writer.handler
+    description: "Write billing data to an S3 bucket"
+    runtime: python3.6
+    memorySize: 128
+    timeout: 15
+    environment:
+      LOG_LEVEL: ${self:custom.log_level}
+      ARCHIVE_S3_BUCKET_NAME:
+        Ref: S3BillingItemWriterS3Bucket
+    iamRoleStatements:
+      - Effect: "Allow"
+        Action:
+          - "S3:PutObject"
+        Resource:
+          Fn::Join:
+            - '/'
+            - - Fn::GetAtt:
+                - S3BillingItemWriterS3Bucket
+                - Arn
+              - '*'
+
 
 resources:
   Resources:
@@ -180,6 +202,32 @@ resources:
           ]
         }
 
+    S3BillingItemWriterS3Bucket:
+      Type: "AWS::S3::Bucket"
+
+    SnsSubscriptionS3BillingItemWriter:
+      Type: 'AWS::SNS::Subscription'
+      Properties:
+        TopicArn:
+          Ref: BillingRecordsSnsTopic
+        Protocol: lambda
+        Endpoint:
+          Fn::GetAtt:
+            - S3BillingItemWriterLambdaFunction
+            - Arn
+
+    # Needed because we're not setting the SNS event in the function section.
+    S3BillingItemWriterLambdaPermission:
+      Type: 'AWS::Lambda::Permission'
+      Properties:
+        Action: "lambda:InvokeFunction"
+        FunctionName:
+          Ref: S3BillingItemWriterLambdaFunction
+        Principal: 'sns.amazonaws.com'
+        SourceArn:
+          Ref: BillingRecordsSnsTopic
+
+
   Outputs:
     BillingReportS3BucketName:
       Description: "S3 bucket where billing reports are delivered to."
@@ -187,4 +235,11 @@ resources:
         Ref: S3BucketAwsadmprimebillingreportsAWSAccountId
       Export:
         Name: "${self:service}-${self:provider.stage}-BillingReportS3BucketName"
+
+    S3BillingItemWriterBucketName:
+      Description: "S3 bucket where billing reports are delivered to."
+      Value:
+        Ref: S3BillingItemWriterS3Bucket
+      Export:
+        Name: "${self:service}-${self:provider.stage}-S3BillingItemWriterBucketName"
 
