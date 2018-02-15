@@ -23,12 +23,14 @@ def _get_line_item_from_event(event):
 
 
 def _get_s3_key(line_item):
+    '''Get S3 key based on line item info.'''
     item_id = line_item.get('identity').get('LineItemId')
 
     return item_id + '.json'
 
 
 def _write_item_to_s3(s3_bucket, s3_key, line_item):
+    '''Write item to S3'''
     resp = s3_client.put_object(
         Bucket=s3_bucket,
         Key=s3_key,
@@ -42,6 +44,19 @@ def handler(event, context):
     _logger.info('Event received: {}'.format(json.dumps(event)))
     line_item = _get_line_item_from_event(event)
     s3_key = _get_s3_key(line_item)
+
+    _logger.info(
+        'Writing Data to S3: {}'.format(
+            json.dumps(
+                {
+                    's3_bucket':ARCHIVE_S3_BUCKET_NAME,
+                    's3_key':s3_key
+                }
+            )
+        )
+    )
+
+    _logger.debug('line_item: {}'.format(json.dumps(line_item)))
     s3_resp = _write_item_to_s3(ARCHIVE_S3_BUCKET_NAME, s3_key, line_item)
 
     resp = {
