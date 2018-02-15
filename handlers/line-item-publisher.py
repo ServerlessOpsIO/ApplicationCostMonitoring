@@ -30,6 +30,16 @@ def _convert_empty_value_to_none(item):
     return item
 
 
+def _delete_s3_object(s3_bucket, s3_key):
+    '''Get object body from S3.'''
+    resp = s3_client.delete_object(
+        Bucket=s3_bucket,
+        Key = s3_key
+    )
+
+    return resp
+
+
 def _publish_sns_message(topic_arn, line_item):
     '''Publish message to SNS'''
     resp = sns_client.publish(
@@ -105,7 +115,6 @@ def handler(event, context):
     record_headers = s3_body_file.readline().strip().split(',')
 
     sns_resp = []
-    lambda_resp = None
 
     line_items = s3_body_file.readlines()[record_offset:]
     len_line_items = len(line_items)
@@ -129,19 +138,27 @@ def handler(event, context):
         sns_resp.append(resp)
         record_offset += 1
 
-        if context.get_remaining_time_in_millis() <= 2000 and record_offset < len_line_items:
-            _logger.info('Invoking additional execution at record offset: {}'.format(record_offset))
-            lambbda_resp = _process_additional_items(context.invoked_function_arn, event, record_offset)
-            _logger.info('Invoked additional Lambda response: {}'.format(json.dumps(resp)))
-
+        if context.get_remaining_time_in_millis() <= 2000:
             break
+
+    # We're done.  Remove file.
+    if record_offset < len_line_items:
+        _logger.info('Invoking additional execution at record offset: {}'.format(record_offset))
+        lambda_resp = _process_additional_items(context.invoked_function_arn, event, record_offset)
+        _logger.info('Invoked additional Lambda response: {}'.format(json.dumps(resp)))
+
+        s3_response = None
+    else:
+        s3_response = _delete_s3_object(s3_bucket, s3_key)
+        lambda_resp = None
 
     resp = {
         'sns': sns_resp,
-        'lambda': lambbda_resp
+        'lambda': lambda_resp,
+        's3': s3_response,
     }
 
-    _logger.info('SNS responses: {}'.format(json.dumps(resp)))
-    return sns_publish_responses
+    _logger.info('AWS responses: {}'.format(json.dumps(resp)))
+    return resp
 
 

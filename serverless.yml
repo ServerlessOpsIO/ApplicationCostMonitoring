@@ -56,6 +56,7 @@ functions:
       - Effect: "Allow"
         Action:
           - "S3:GetObject"
+          - "S3:DeleteObject"
         Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-decompress-#{AWS::AccountId}/*"
       - Effect: "Allow"
         Action:
