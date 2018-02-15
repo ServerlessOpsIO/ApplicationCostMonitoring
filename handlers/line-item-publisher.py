@@ -132,7 +132,7 @@ def handler(event, context):
         if context.get_remaining_time_in_millis() <= 2000 and record_offset < len_line_items:
             _logger.info('Invoking additional execution at record offset: {}'.format(record_offset))
             lambbda_resp = _process_additional_items(context.invoked_function_arn, event, record_offset)
-            _logger.info('Invoked additional Lambda response: {}'.json.dumps(resp))
+            _logger.info('Invoked additional Lambda response: {}'.format(json.dumps(resp)))
 
             break
 
