@@ -1,4 +1,4 @@
-# Fetch object from S3 and publish items to SNS
+'''Fetch object from S3 and publish items to SNS'''
 
 import boto3
 import io
@@ -34,7 +34,7 @@ def _delete_s3_object(s3_bucket, s3_key):
     '''Get object body from S3.'''
     resp = s3_client.delete_object(
         Bucket=s3_bucket,
-        Key = s3_key
+        Key=s3_key
     )
 
     return resp
@@ -54,7 +54,7 @@ def _get_s3_object_body(s3_bucket, s3_key):
     '''Get object body from S3.'''
     s3_object = s3_client.get_object(
         Bucket=s3_bucket,
-        Key = s3_key
+        Key=s3_key
     )
 
     s3_object_body = s3_object.get('Body').read().decode()
@@ -116,8 +116,12 @@ def handler(event, context):
 
     sns_resp = []
 
-    line_items = s3_body_file.readlines()[record_offset:]
-    len_line_items = len(line_items)
+    # FIXME: This block has caused us to need to allocate more memory. We
+    # should get more efficient with this.
+    total_line_items = s3_body_file.readlines()
+    len_total_line_items = len(total_line_items)
+    _logger.info('Total items: {}'.format(len_total_line_items))
+    line_items = total_line_items[record_offset:]
 
     # NOTE: We might decide to batch send multiple records at a time.  It's
     # Worth a look after we have decne t metrics to understand tradeoffs.
@@ -142,7 +146,7 @@ def handler(event, context):
             break
 
     # We're done.  Remove file.
-    if record_offset < len_line_items:
+    if record_offset < len_total_line_items:
         _logger.info('Invoking additional execution at record offset: {}'.format(record_offset))
         lambda_resp = _process_additional_items(context.invoked_function_arn, event, record_offset)
         _logger.info('Invoked additional Lambda response: {}'.format(json.dumps(resp)))
