@@ -15,6 +15,7 @@ provider:
   profile: ${self:custom.profile}
   stage: ${self:custom.stage}
   environment:
+    LOG_LEVEL: ${self:custom.log_level}
     IOPIPE_TOKEN: "${env:IOPIPE_TOKEN}"
 
 functions:
@@ -25,7 +26,6 @@ functions:
     memorySize: 128
     timeout: 300
     environment:
-      LOG_LEVEL: ${self:custom.log_level}
       DECOMPRESS_S3_BUCKET_NAME:
         Ref: S3BucketAwsadmprimedecompressAWSAccountId
     iamRoleStatements:
@@ -51,7 +51,6 @@ functions:
     memorySize: 512
     timeout: 300
     environment:
-      LOG_LEVEL: ${self:custom.log_level}
       AWS_SNS_TOPIC:
         Ref: BillingRecordsSnsTopic
     iamRoleStatements:
@@ -81,7 +80,6 @@ functions:
     memorySize: 128
     timeout: 15
     environment:
-      LOG_LEVEL: ${self:custom.log_level}
       ARCHIVE_S3_BUCKET_NAME:
         Ref: S3BillingItemWriterS3Bucket
     iamRoleStatements:
