@@ -7,7 +7,7 @@ import logging
 import os
 
 ARCHIVE_S3_BUCKET_NAME = os.environ.get('ARCHIVE_S3_BUCKET_NAME')
-S3_PREFIX='aws-adm'
+S3_PREFIX = 'aws-adm'
 
 log_level = os.environ.get('LOG_LEVEL', 'INFO')
 logging.root.setLevel(logging.getLevelName(log_level))
@@ -30,11 +30,13 @@ def _get_s3_key(line_item):
     item_id = line_item.get('identity').get('LineItemId')
     start_date_time = iso8601.parse_date(start_time)
 
-    s3_key = '{prefix}/year={year}/month={month}/day={day}/{item_id}.json'.format(
+    # FIXME: We need to ensure that this results in truly unique objects.
+    s3_key = '{prefix}/year={year}/month={month}/day={day}/time={time}/{item_id}.json'.format(
         prefix=S3_PREFIX,
         year=start_date_time.year,
         month=start_date_time.month,
         day=start_date_time.day,
+        time=str(start_date_time.time()),
         item_id=item_id
     )
 
