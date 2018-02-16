@@ -106,7 +106,7 @@ def handler(event, context):
     _logger.info('S3 event received: {}'.format(json.dumps(event)))
     s3_bucket = event.get('Records')[0].get('s3').get('bucket').get('name')
     s3_key = event.get('Records')[0].get('s3').get('object').get('key')
-    record_offset=  event.get('Records')[0].get(X_RECORD_OFFSET, 1)
+    record_offset=  event.get('Records')[0].get(X_RECORD_OFFSET, 0)
 
     s3_object_body = _get_s3_object_body(s3_bucket, s3_key)
     s3_body_file = io.StringIO(s3_object_body)
