@@ -1,11 +1,13 @@
 # Write billing items to S3
 
 import boto3
+import iso8601
 import json
 import logging
 import os
 
 ARCHIVE_S3_BUCKET_NAME = os.environ.get('ARCHIVE_S3_BUCKET_NAME')
+S3_PREFIX='aws-adm'
 
 log_level = os.environ.get('LOG_LEVEL', 'INFO')
 logging.root.setLevel(logging.getLevelName(log_level))
@@ -24,9 +26,19 @@ def _get_line_item_from_event(event):
 
 def _get_s3_key(line_item):
     '''Get S3 key based on line item info.'''
+    start_time, end_time = line_item.get('identity').get('TimeInterval').split('/')
     item_id = line_item.get('identity').get('LineItemId')
+    start_date_time = iso8601.parse_date(start_time)
 
-    return item_id + '.json'
+    s3_key = '{prefix}/year={year}/month={month}/day={day}/{item_id}.json'.format(
+        prefix=S3_PREFIX,
+        year=start_date_time.year,
+        month=start_date_time.month,
+        day=start_date_time.day,
+        item_id=item_id
+    )
+
+    return s3_key
 
 
 def _write_item_to_s3(s3_bucket, s3_key, line_item):
