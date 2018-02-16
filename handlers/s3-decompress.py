@@ -12,6 +12,9 @@ import logging
 import os
 import gzip
 
+from iopipe.iopipe import IOpipe
+iopipe = IOpipe()
+
 PROCESSING_S3_BUCKET_NAME = os.environ.get('DECOMPRESS_S3_BUCKET_NAME')
 
 log_level = os.environ.get('LOG_LEVEL', 'INFO')
@@ -38,6 +41,7 @@ def _get_s3_object(s3_bucket, s3_key):
     return s3_object
 
 
+@iopipe
 def handler(event, context):
     _logger.info('S3 event received: {}'.format(json.dumps(event)))
     s3_bucket = event.get('Records')[0].get('s3').get('bucket').get('name')

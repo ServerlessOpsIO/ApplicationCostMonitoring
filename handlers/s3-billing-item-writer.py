@@ -6,6 +6,9 @@ import json
 import logging
 import os
 
+from iopipe.iopipe import IOpipe
+iopipe = IOpipe()
+
 ARCHIVE_S3_BUCKET_NAME = os.environ.get('ARCHIVE_S3_BUCKET_NAME')
 S3_PREFIX = 'aws-adm'
 
@@ -54,6 +57,7 @@ def _write_item_to_s3(s3_bucket, s3_key, line_item):
     return resp
 
 
+@iopipe
 def handler(event, context):
     _logger.info('Event received: {}'.format(json.dumps(event)))
     line_item = _get_line_item_from_event(event)

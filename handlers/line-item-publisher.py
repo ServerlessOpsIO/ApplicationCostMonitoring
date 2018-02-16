@@ -6,6 +6,9 @@ import json
 import logging
 import os
 
+from iopipe.iopipe import IOpipe
+iopipe = IOpipe()
+
 AWS_SNS_TOPIC = os.environ.get('AWS_SNS_TOPIC')
 
 X_RECORD_OFFSET = 'x-record-offset'
@@ -102,6 +105,7 @@ def _process_additional_items(arn, event, record_offset):
     return resp
 
 
+@iopipe
 def handler(event, context):
     _logger.info('S3 event received: {}'.format(json.dumps(event)))
     s3_bucket = event.get('Records')[0].get('s3').get('bucket').get('name')

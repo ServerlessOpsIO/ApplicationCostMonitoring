@@ -14,6 +14,8 @@ provider:
   name: aws
   profile: ${self:custom.profile}
   stage: ${self:custom.stage}
+  environment:
+    IOPIPE_TOKEN: "${env:IOPIPE_TOKEN}"
 
 functions:
   S3Decompress:
