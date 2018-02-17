@@ -149,7 +149,7 @@ def handler(event, context):
     if record_offset < len_total_line_items:
         _logger.info('Invoking additional execution at record offset: {}'.format(record_offset))
         lambda_resp = _process_additional_items(context.invoked_function_arn, event, record_offset)
-        _logger.info('Invoked additional Lambda response: {}'.format(json.dumps(resp)))
+        _logger.info('Invoked additional Lambda response: {}'.format(json.dumps(lambda_resp)))
 
         s3_response = None
     else:
