@@ -126,8 +126,10 @@ def handler(event, context):
     # NOTE: We might decide to batch send multiple records at a time.  It's
     # Worth a look after we have decne t metrics to understand tradeoffs.
     for line_item in line_items:
-        stripped_line_item = line_item.strip()
+        record_offset += 1
         _logger.info('Publishing line_item: {}'.format(record_offset))
+
+        stripped_line_item = line_item.strip()
 
         line_item_msg = _create_line_item_message(record_headers, stripped_line_item)
         _logger.debug('message: {}'.format(json.dumps(line_item_msg)))
@@ -140,7 +142,6 @@ def handler(event, context):
         )
 
         sns_resp.append(resp)
-        record_offset += 1
 
         if context.get_remaining_time_in_millis() <= 2000:
             break
