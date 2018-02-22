@@ -23,7 +23,7 @@ functions:
     handler: handlers/s3-decompress.handler
     description: "Decompress an S3 object and publish contents to an S3 bucket temporarily for processing."
     runtime: python3.6
-    memorySize: 128
+    memorySize: 256
     timeout: 300
     environment:
       DECOMPRESS_S3_BUCKET_NAME:
