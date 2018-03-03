@@ -236,6 +236,13 @@ resources:
       Export:
         Name: "${self:service}-${self:provider.stage}-BillingReportS3BucketName"
 
+    BillingRecordsSnsTopicArn:
+      Description: "SNS topic ARN where billing records are published to."
+      Value:
+        Ref: BillingRecordsSnsTopic
+      Export:
+        Name: "${self:service}-${self:provider.stage}-BillingRecordsSnsTopicArn"
+
     S3BillingItemWriterBucketName:
       Description: "S3 bucket where billing reports are delivered to."
       Value:
