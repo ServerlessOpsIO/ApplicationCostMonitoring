@@ -43,6 +43,16 @@ def _get_s3_key(line_item):
     return s3_key
 
 
+def _remove_resource_tags(line_item):
+    '''Remove resourceTags from line item'''
+    # Due to issues with Athena because not all items have tags, we must
+    # remove them.
+    if 'resourceTags' in line_item.keys():
+        line_item.pop('resourceTags')
+
+    return line_item
+
+
 def _write_item_to_s3(s3_bucket, s3_key, line_item):
     '''Write item to S3'''
     resp = s3_client.put_object(
@@ -57,6 +67,7 @@ def _write_item_to_s3(s3_bucket, s3_key, line_item):
 def handler(event, context):
     _logger.info('Event received: {}'.format(json.dumps(event)))
     line_item = _get_line_item_from_event(event)
+    line_item = _remove_resource_tags(line_item)
     s3_key = _get_s3_key(line_item)
 
     _logger.info(
