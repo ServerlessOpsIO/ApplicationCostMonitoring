@@ -103,7 +103,7 @@ def _process_additional_items(arn, event, record_offset):
 
 
 def handler(event, context):
-    _logger.info('S3 event received: {}'.format(json.dumps(event)))
+    _logger.debug('S3 event received: {}'.format(json.dumps(event)))
     s3_bucket = event.get('Records')[0].get('s3').get('bucket').get('name')
     s3_key = event.get('Records')[0].get('s3').get('object').get('key')
     record_offset=  event.get('Records')[0].get(X_RECORD_OFFSET, 0)

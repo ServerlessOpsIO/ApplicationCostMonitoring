@@ -39,7 +39,7 @@ def _get_s3_object(s3_bucket, s3_key):
 
 
 def handler(event, context):
-    _logger.info('S3 event received: {}'.format(json.dumps(event)))
+    _logger.debug('S3 event received: {}'.format(json.dumps(event)))
     s3_bucket = event.get('Records')[0].get('s3').get('bucket').get('name')
     s3_key = event.get('Records')[0].get('s3').get('object').get('key')
 
@@ -53,6 +53,7 @@ def handler(event, context):
         Body=s3_object_data,
     )
 
+    _logger.info('Response: {}'.format(json.dumps(resp)))
     return resp
 
 

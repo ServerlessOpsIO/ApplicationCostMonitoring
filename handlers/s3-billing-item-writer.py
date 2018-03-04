@@ -65,7 +65,7 @@ def _write_item_to_s3(s3_bucket, s3_key, line_item):
 
 
 def handler(event, context):
-    _logger.info('Event received: {}'.format(json.dumps(event)))
+    _logger.debug('Event received: {}'.format(json.dumps(event)))
     line_item = _get_line_item_from_event(event)
     line_item = _remove_resource_tags(line_item)
     s3_key = _get_s3_key(line_item)
