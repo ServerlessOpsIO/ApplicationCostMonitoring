@@ -7,7 +7,7 @@ import logging
 import os
 
 ARCHIVE_S3_BUCKET_NAME = os.environ.get('ARCHIVE_S3_BUCKET_NAME')
-S3_PREFIX = 'aws-adm'
+S3_PREFIX = os.environ.get('S3_PREFIX')
 
 log_level = os.environ.get('LOG_LEVEL', 'INFO')
 logging.root.setLevel(logging.getLevelName(log_level))

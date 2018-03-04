@@ -9,6 +9,9 @@ custom:
   stage: "${opt:stage, env:SLS_STAGE, 'dev'}"
   profile: "${opt:aws-profile, env:AWS_PROFILE, env:AWS_DEFAULT_PROFILE, 'default'}"
   log_level: "${env:LOG_LEVEL, 'INFO'}"
+  database_s3_prefix: 'aws-adm'
+  database_table_name: 'line_items'
+  billing_item_bucket_s3_prefix: '${self:custom.database_s3_prefix}/${self:custom.database_table_name}'
 
 provider:
   name: aws
@@ -20,7 +23,7 @@ functions:
     handler: handlers/s3-decompress.handler
     description: "Decompress an S3 object and publish contents to an S3 bucket temporarily for processing."
     runtime: python3.6
-    memorySize: 128
+    memorySize: 256
     timeout: 300
     environment:
       LOG_LEVEL: ${self:custom.log_level}
@@ -82,6 +85,7 @@ functions:
       LOG_LEVEL: ${self:custom.log_level}
       ARCHIVE_S3_BUCKET_NAME:
         Ref: S3BillingItemWriterS3Bucket
+      S3_PREFIX: ${self:custom.billing_item_bucket_s3_prefix}
     iamRoleStatements:
       - Effect: "Allow"
         Action:
@@ -226,6 +230,100 @@ resources:
         Principal: 'sns.amazonaws.com'
         SourceArn:
           Ref: BillingRecordsSnsTopic
+
+    AdmGlueDatabase:
+      Type: 'AWS::Glue::Database'
+      Properties:
+        DatabaseInput:
+          Description: 'Application Dollar Monitoring Data'
+          Name: 'application_dollar_monitoring'
+          LocationUri:
+            Fn::Join:
+              - '/'
+              - - 's3:/'
+                - Ref: S3BillingItemWriterS3Bucket
+                - '${self:custom.database_s3_prefix}'
+        CatalogId:
+          Ref: AWS::AccountId
+
+# NOTE: If we want to use the crawler then we can't create the table ourself.
+# We should rethink this at some point.  Until partitioning is figured out
+# we'll use the crawler.
+#    AdmBillingItemGlueTable:
+#      Type: 'AWS::Glue::Table'
+#      Properties:
+#        DatabaseName:
+#          Ref: AdmGlueDatabase
+#        CatalogId:
+#          Ref: AWS::AccountId
+#        TableInput:
+#          Name: '${self:custom.database_table_name}'
+#          Description: 'AWS bill line items'
+#          Parameters: {"classification": "json"}
+#          StorageDescriptor:
+#            Location:
+#              Fn::Join:
+#                - '/'
+#                - - 's3:/'
+#                  - Ref: S3BillingItemWriterS3Bucket
+#                  - '${self:custom.billing_item_bucket_s3_prefix}'
+#            InputFormat: 'org.apache.hadoop.mapred.TextInputFormat'
+#            OutputFormat: 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+#            SerdeInfo:
+#              SerializationLibrary: 'org.openx.data.jsonserde.JsonSerDe'
+
+    AdmLineItemCrawlerIamRole:
+      Type: 'AWS::IAM::Role'
+      Properties:
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: 'Allow'
+              Principal:
+                Service:
+                  - 'glue.amazonaws.com'
+              Action:
+                - 'sts:AssumeRole'
+        ManagedPolicyArns:
+          - 'arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole'
+        Policies:
+          - PolicyName: '${self:service}-${self:provider.stage}-crawler'
+            PolicyDocument:
+              Statement:
+                - Effect: 'Allow'
+                  Action:
+                    - 's3:GetObject'
+                    - 's3:PutObject'
+                  Resource:
+                    - Fn::Join:
+                      - '/'
+                      - - Fn::GetAtt:
+                          - S3BillingItemWriterS3Bucket
+                          - Arn
+                        - '${self:custom.billing_item_bucket_s3_prefix}'
+                        - '*'
+
+    AdmLineItemCrawler:
+      Type: 'AWS::Glue::Crawler'
+      Properties:
+        Role:
+          Fn::GetAtt:
+            - AdmLineItemCrawlerIamRole
+            - Arn
+        DatabaseName:
+          Ref: AdmGlueDatabase
+        Targets:
+          S3Targets:
+            - Path:
+                Fn::Join:
+                  - '/'
+                  - - 's3:/'
+                    - Ref: S3BillingItemWriterS3Bucket
+                    - '${self:custom.billing_item_bucket_s3_prefix}'
+        SchemaChangePolicy:
+          UpdateBehavior: "UPDATE_IN_DATABASE"
+          DeleteBehavior: "DEPRECATE_IN_DATABASE"
+        Schedule:
+          ScheduleExpression: "cron(15 1/6 * * ? *)"
 
 
   Outputs:
