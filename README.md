@@ -10,6 +10,7 @@ Using the nightly generated AWS billing report, This system will parse the repor
 ![System Architecture](/AWS%20ADM%20Diagram.png?raw=true "System Architecture")
 
 ## Deployment
+### Application Deployment
 Clone of this repository by using [Serverless Framework](https://serverless.com/).
 
 ```
@@ -17,6 +18,11 @@ $ npm install -g serverless
 $ npm install
 $ serverless deploy -v
 ```
+### Billing Report Setup
+
+Setup billing report.
+
+Once a report is run and Glue crawler has run, the `line_items` table will be available in the application_dollar_monitoring database.
 
 ## Usage
 Use [AWS Athena](https://aws.amazon.com/athena/) to query the data.
