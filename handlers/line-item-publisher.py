@@ -22,6 +22,10 @@ sns_client = boto3.client('sns')
 lambda_client = boto3.client('lambda')
 
 
+class BillingReportSchemaChange(Exception):
+    pass
+
+
 def _check_next_record_date(last_line_item, next_line_item):
     # Check that the next record is for a new time period.
 
@@ -48,6 +52,19 @@ def _check_record_offset(old_line_item, new_line_item):
                 new_line_item_time_interval
             )
         )
+
+
+def _check_report_schema_change(headers, line_item):
+    '''Compare a line_item doc with a set of headers.'''
+    line_item.pop(LINE_ITEM_OFFSET_KEY)
+    line_item_headers = []
+    for k, v in line_item.items():
+        for subk, subv in v.items():
+            line_item_headers.append('/'.join([k, subk]))
+
+    headers.sort()
+    line_item_headers.sort()
+    return headers == line_item_headers
 
 
 def _check_s3_object_exists(s3_bucket, s3_key):
@@ -115,7 +132,6 @@ def _get_last_record_offset(s3_bucket):
 def _get_line_item_billing_period_start_datetime(line_item):
     '''Get the '''
     time_string = line_item.get('bill').get('BillingPeriodStartDate')
-
     return iso8601.parse_date(time_string)
 
 
@@ -130,7 +146,7 @@ def _get_line_item_id(line_item):
 
 
 def _get_line_item_time_interval(line_item):
-    '''Get the '''
+    '''Get the time interval of the line item'''
     return line_item.get('identity').get('TimeInterval')
 
 
@@ -246,14 +262,24 @@ def handler(event, context):
     # Get header so we can format messages.
     record_headers = total_line_items[0].strip().split(',')
 
+
     # Check if a last run state file exists.
     if record_offset is None:
         last_line_item = _get_last_adm_line_item(s3_bucket)
         _logger.debug('last_line_item: {}'.format(json.dumps(last_line_item)))
 
+
+    # Check for a billing report schema change. This causes some
+    # identity.LineItemIds to change.
+    if len(last_line_item) > 0:
+        # Need to use a copy of the record header list or building items later fails.
+        if not _check_report_schema_change(record_headers[:], last_line_item):
+            raise BillingReportSchemaChange('Schema mismatch')
+
+
     # check if we're in a new month
     if record_offset is None and len(last_line_item) > 0:
-        billing_report_start = _get_billing_report_start_datetime(record_headers, total_line_items[1])
+        billing_report_start = _get_billing_report_start_datetime(record_headers, total_line_items[1].strip())
         last_line_item_start = _get_line_item_billing_period_start_datetime(last_line_item)
 
         # NOTE: We don't care about GT or LT. As a result, the state file will
