@@ -5,7 +5,7 @@
 
 Application Dollar Monitoring provides granular AWS spend tracking.
 
-Using the nightly generated AWS billing report, This system will parse the report and feed the line items to a place where you can perform analysis.  Currently supported is S3 which allows you to use Athena to query your billing items.
+Using the nightly generated AWS billing report, this system will parse the report and feed the line items to a place where you can perform analysis.
 
 ![System Architecture](/AWS%20ADM%20Diagram.png?raw=true "System Architecture")
 
@@ -25,4 +25,6 @@ Setup billing report.
 Once a report is run and Glue crawler has run, the `line_items` table will be available in the application_dollar_monitoring database.
 
 ## Usage
-Use [AWS Athena](https://aws.amazon.com/athena/) to query the data.
+This service only handles billing report ingestion and parsing.  It requires an additional publisher service to be useful.  Available ones are:
+
+* [aws-application-dollar-monitoring-s3-writer](https://github.com/ServerlessOpsIO/aws-application-dollar-monitoring-s3-writer)
