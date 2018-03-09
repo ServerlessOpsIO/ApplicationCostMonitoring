@@ -58,7 +58,12 @@ functions:
     iamRoleStatements:
       - Effect: "Allow"
         Action:
+          - "s3:ListBucket"
+        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-decompress-#{AWS::AccountId}"
+      - Effect: "Allow"
+        Action:
           - "S3:GetObject"
+          - "S3:PutObject"
           - "S3:DeleteObject"
         Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-decompress-#{AWS::AccountId}/*"
       - Effect: "Allow"
@@ -74,6 +79,8 @@ functions:
       - s3:
           bucket: "${self:service}-${self:provider.stage}-decompress-#{AWS::AccountId}"       # S3BucketAWSAccountIddecompressprime
           event: "s3:ObjectCreated:Put"
+          rules:
+            - suffix: ".csv"
 
   S3BillingItemWriter:
     handler: handlers/s3-billing-item-writer.handler
