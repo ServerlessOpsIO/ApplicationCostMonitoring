@@ -10,8 +10,10 @@ import os
 AWS_SNS_TOPIC = os.environ.get('AWS_SNS_TOPIC')
 
 X_RECORD_OFFSET = 'x-record-offset'
-LAST_ADM_ITEM = 'LAST-ADM-ITEM.json'
-LINE_ITEM_OFFSET_KEY = 'lineItemOffset'
+X_RECORD_LATEST_DATE = 'x-record-latest-date'
+
+LAST_ADM_RUN_TIME_STATE = 'LAST_ADM_RUN_TIME_STATE'
+LAST_ADM_RUN_SCHEMA_STATE = 'LAST_ADM_RUN_SCHEMA_STATE'
 
 log_level = os.environ.get('LOG_LEVEL', 'INFO')
 logging.root.setLevel(logging.getLevelName(log_level))
@@ -26,45 +28,15 @@ class BillingReportSchemaChange(Exception):
     pass
 
 
-def _check_next_record_date(last_line_item, next_line_item):
-    # Check that the next record is for a new time period.
-
-    if _get_line_item_time_interval(last_line_item) == _get_line_item_time_interval(next_line_item):
-        _logger.error(
-            'Next line item is from same time period of last run: {}'.format(
-                _get_line_item_time_interval(last_line_item)
-            )
-        )
-
-
-def _check_record_offset(old_line_item, new_line_item):
-    old_line_item_id = _get_line_item_id(old_line_item)
-    new_line_item_id = _get_line_item_id(new_line_item)
-    old_line_item_time_interval = _get_line_item_time_interval(old_line_item)
-    new_line_item_time_interval = _get_line_item_time_interval(new_line_item)
-
-    if (old_line_item_id != new_line_item_id) or (old_line_item_time_interval != new_line_item_time_interval):
-        _logger.error(
-            'Record mismatch: {},{} != {},{}'.format(
-                old_line_item_id,
-                old_line_item_time_interval,
-                new_line_item_id,
-                new_line_item_time_interval
-            )
-        )
-
-
-def _check_report_schema_change(headers, line_item):
+def _check_report_schema_change(record_headers, old_record_headers):
     '''Compare a line_item doc with a set of headers.'''
-    line_item.pop(LINE_ITEM_OFFSET_KEY)
-    line_item_headers = []
-    for k, v in line_item.items():
-        for subk, subv in v.items():
-            line_item_headers.append('/'.join([k, subk]))
+    # We're not going to assume that columns are always in the same position.
+    record_headers_list = record_headers.split(',')
+    record_headers_list.sort()
 
-    headers.sort()
-    line_item_headers.sort()
-    return headers == line_item_headers
+    old_record_headers_list = old_record_headers.split(',')
+    old_record_headers_list.sort()
+    return record_headers_list == old_record_headers_list
 
 
 def _check_s3_object_exists(s3_bucket, s3_key):
@@ -96,12 +68,10 @@ def _convert_empty_value_to_none(item):
     return item
 
 
-def _create_line_item_message(headers, line_item, record_offset=None):
+def _create_line_item_message(headers, line_item):
     '''Return a formatted line item message.'''
     split_line_item = line_item.split(',')
     item_dict = dict(zip(headers, split_line_item))
-    if record_offset is not None:
-        item_dict[LINE_ITEM_OFFSET_KEY] = record_offset
     sanitized_item_dict = _convert_empty_value_to_none(item_dict)
 
     final_dict = _format_line_item_dict(sanitized_item_dict)
@@ -109,57 +79,9 @@ def _create_line_item_message(headers, line_item, record_offset=None):
     return final_dict
 
 
-def _get_billing_report_start_datetime(headers, line_item):
-    '''Get the start time from a line.'''
-    line_item_dict = _create_line_item_message(headers, line_item)
-
-    return _get_line_item_billing_period_start_datetime(line_item_dict)
-
-
-def _get_last_record_offset(s3_bucket):
-    # get item from last run if it exists
-    last_line_item = _get_last_adm_line_item(s3_bucket)
-    _logger.info('last_line_item: {}'.format(json.dumps(last_line_item)))
-
-    if len(last_line_item) > 0:
-        record_offset = _get_line_item_offset(last_line_item)
-    else:
-        record_offset = None
-
-    return record_offset
-
-
-def _get_line_item_billing_period_start_datetime(line_item):
-    '''Get the '''
-    time_string = line_item.get('bill').get('BillingPeriodStartDate')
-    return iso8601.parse_date(time_string)
-
-
-def _get_line_item_offset(line_item):
-    '''Get the offset key of a line item'''
-    return line_item.get(LINE_ITEM_OFFSET_KEY)
-
-
-def _get_line_item_id(line_item):
-    '''Get the '''
-    return line_item.get('identity').get('LineItemId')
-
-
 def _get_line_item_time_interval(line_item):
     '''Get the time interval of the line item'''
-    return line_item.get('identity').get('TimeInterval')
-
-
-def _get_last_adm_line_item(s3_bucket):
-    '''Get the last ADM item from the last run.'''
-    key = LAST_ADM_ITEM
-
-    if _check_s3_object_exists(s3_bucket, key):
-        line_item = json.loads(_get_s3_object_body(s3_bucket, key))
-    else:
-        line_item = {}
-
-    return line_item
+    return line_item.get('identity').get('TimeInterval').split('/')
 
 
 def _delete_s3_object(s3_bucket, s3_key):
@@ -201,9 +123,11 @@ def _format_line_item_dict(line_item_dict):
     return formatted_line_item_dict
 
 
-def _process_additional_items(arn, event, record_offset):
+def _process_additional_items(arn, event, record_offset, this_latest_datetime):
     '''Process additional records.'''
     event.get('Records')[0][X_RECORD_OFFSET] = record_offset
+    event.get('Records')[0][X_RECORD_LATEST_DATE] = str(this_latest_datetime)
+
     resp = lambda_client.invoke(
         FunctionName=arn,
         Payload=json.dumps(event),
@@ -224,20 +148,12 @@ def _publish_sns_message(topic_arn, line_item):
     return resp
 
 
-def _put_last_adm_item(s3_bucket, line_item):
-    '''Get the last ADM item from the last run.'''
-    s3_key = LAST_ADM_ITEM
-    resp = _put_s3_object(s3_bucket, s3_key, line_item)
-
-    return resp
-
-
-def _put_s3_object(s3_bucket, s3_key, line_item):
+def _put_s3_object(s3_bucket, s3_key, body):
     '''Write item to S3'''
     resp = s3_client.put_object(
         Bucket=s3_bucket,
         Key=s3_key,
-        Body=json.dumps(line_item)
+        Body=body
     )
 
     return resp
@@ -247,143 +163,104 @@ def handler(event, context):
     _logger.info('S3 event received: {}'.format(json.dumps(event)))
     s3_bucket = event.get('Records')[0].get('s3').get('bucket').get('name')
     s3_key = event.get('Records')[0].get('s3').get('object').get('key')
+
     record_offset = event.get('Records')[0].get(X_RECORD_OFFSET)
+    this_run_record_latest_date = event.get('Records')[0].get(X_RECORD_LATEST_DATE, '1970-01-01T00:00:00Z')
+    this_run_record_latest_datetime = iso8601.parse_date(this_run_record_latest_date)
 
     s3_object_body = _get_s3_object_body(s3_bucket, s3_key)
     s3_body_file = io.StringIO(s3_object_body)
 
     # FIXME: This block has caused us to need to allocate more memory. We
     # should get more efficient with this.
-    total_line_items = s3_body_file.readlines()
-    # Get header so we can format messagesd
-    len_total_line_items = len(total_line_items) - 1    # Account for header
-    _logger.info('Total items: {}'.format(len_total_line_items))
-
     # Get header so we can format messages.
-    record_headers = total_line_items[0].strip().split(',')
+    record_headers = s3_body_file.readline()
+    line_items = s3_body_file.readlines()
+    total_line_items = len(line_items)
+    _logger.info('Total items: {}'.format(total_line_items))
 
-
-    # Check if a last run state file exists.
+    # This is an initial processing run of a given report.
     if record_offset is None:
-        last_line_item = _get_last_adm_line_item(s3_bucket)
-        _logger.debug('last_line_item: {}'.format(json.dumps(last_line_item)))
-
-
-    # Check for a billing report schema change. This causes some
-    # identity.LineItemIds to change.
-    if len(last_line_item) > 0:
-        # Need to use a copy of the record header list or building items later fails.
-        if not _check_report_schema_change(record_headers[:], last_line_item):
-            raise BillingReportSchemaChange('Schema mismatch')
-
-
-    # check if we're in a new month
-    if record_offset is None and len(last_line_item) > 0:
-        billing_report_start = _get_billing_report_start_datetime(record_headers, total_line_items[1].strip())
-        last_line_item_start = _get_line_item_billing_period_start_datetime(last_line_item)
-
-        # NOTE: We don't care about GT or LT. As a result, the state file will
-        # always reflect the last run.  That means processing a previous
-        # month, eg. manual invocation, will cause the current month's data to
-        # be reprocessed.
-        if last_line_item_start.month != billing_report_start.month:
-            record_offset = 1
-
-    # NOTE: I'm unsure if line item order in the report is persistent or if
-    # values might change.
-    if record_offset is None and len(last_line_item) > 0:
-        # get item from last run if it exists
-        last_line_item_offset = _get_line_item_offset(last_line_item)
-        # FIXME: testing the data here to see if old data remains
-        # consistent across reports.
-        assumed_last_line_item = _create_line_item_message(record_headers, total_line_items[last_line_item_offset])
-        _check_record_offset(last_line_item, assumed_last_line_item)
-
-        if last_line_item_offset == len(total_line_items) - 1:
-            _logger.info('Appears to be same report as last time.')
-            record_offset = -1
-        # There's more records since last known spot.
-        elif last_line_item_offset < len(total_line_items):
-            next_line_item = _create_line_item_message(record_headers, total_line_items[last_line_item_offset + 1])
-            _check_next_record_date(last_line_item, next_line_item)
-            record_offset = last_line_item_offset + 1
-        # We shouldn't hit this unless we've processed reports out of order.
-        # Just start from beginning if out of order.
+        # Check for a billing report schema change.
+        if not _check_s3_object_exists(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE):
+            _put_s3_object(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE, record_headers)
         else:
-            _logger.info(
-                'Out of order report. Got offset {} but report has {} items. Processing anyways...'.format(
-                        last_line_item_offset,
-                        len(total_line_items) - 1   # Account for header record.
-                )
-            )
-            record_offset = 1
+            old_record_headers = _get_s3_object_body(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE)
+            if not _check_report_schema_change(record_headers, old_record_headers):
+                raise BillingReportSchemaChange('Schema mismatch')
 
-    # There's last run record so we start from beginning.
-    if record_offset is None:
-        record_offset = 1
-
-    # Here we check essentially if we're not processing the same report over.
-    if record_offset > 0:
-        line_items = total_line_items[record_offset:]
+    # Get last run latest time.
+    if not _check_s3_object_exists(s3_bucket, LAST_ADM_RUN_TIME_STATE):
+        last_run_record_latest_date = '1970-01-01T00:00:00Z'
+        _put_s3_object(s3_bucket, LAST_ADM_RUN_TIME_STATE, last_run_record_latest_date)
     else:
-        line_items = []
+        last_run_record_latest_date = _get_s3_object_body(s3_bucket, LAST_ADM_RUN_TIME_STATE).strip()
+    last_run_record_latest_datetime = iso8601.parse_date(last_run_record_latest_date)
+
+    if record_offset is None:
+        record_offset = 0
+
+    line_items = line_items[record_offset:]
 
     # NOTE: We might decide to batch send multiple records at a time.  It's
     # Worth a look after we have decent metrics to understand tradeoffs.
-    sns_resp = []
-    last_line_item_msg = None
+
+    published_line_items = 0
+    record_headers_list = record_headers.split(',')
     for line_item in line_items:
-        _logger.info('Publishing line_item: {}'.format(record_offset))
         _logger.debug('line_item: {}'.format(line_item))
 
         stripped_line_item = line_item.strip()
-        line_item_msg = _create_line_item_message(record_headers, stripped_line_item, record_offset)
+        line_item_msg = _create_line_item_message(record_headers_list, stripped_line_item)
         _logger.debug('message: {}'.format(json.dumps(line_item_msg)))
 
-        resp = _publish_sns_message(AWS_SNS_TOPIC, line_item_msg)
-        _logger.debug(
-            'Publish response for line_item {}: {}'.format(
-                record_offset, json.dumps(resp)
-            )
-        )
+        line_item_start, line_item_end = _get_line_item_time_interval(line_item_msg)
+        line_item_start_datetime = iso8601.parse_date(line_item_start)
 
-        sns_resp.append(resp)
+        # First of month line items get appended through month and data can
+        # change on old ones.
+        is_first_of_month_line_item = line_item_start_datetime.day == 1
+        is_newer_than_last_run = line_item_start_datetime > last_run_record_latest_datetime
+
+        if is_newer_than_last_run or is_first_of_month_line_item:
+            _logger.info('Publishing line_item: {}/{}'.format(record_offset + 1, total_line_items))
+            resp = _publish_sns_message(AWS_SNS_TOPIC, line_item_msg)
+            _logger.debug(
+                'Publish response for line_item {}: {}'.format(
+                    record_offset, json.dumps(resp)
+                )
+            )
+            published_line_items += 1
+            if line_item_start_datetime > this_run_record_latest_datetime:
+                this_run_record_latest_datetime = line_item_start_datetime
+
         record_offset += 1
-        # Keep track of this so when we break we know
-        last_line_item_msg = line_item_msg
 
         if context.get_remaining_time_in_millis() <= 2000:
             break
 
-    # Mark where we are.  Even if processing is not done, we at least have
-    # this much known processed in case we
-    if last_line_item_msg is not None:
-        s3_last_item_resp = _put_last_adm_item(s3_bucket, last_line_item_msg)
-    else:
-        s3_last_item_resp = None
-
     # We're done.  Remove file.
     # FIXME: Need a better way to check for processing same report than using
     # -1 as the offset.
-    if record_offset > 0 and record_offset < len_total_line_items:
+    if record_offset < total_line_items:
         _logger.info('Invoking additional execution at record offset: {}'.format(record_offset))
-        lambda_resp = _process_additional_items(context.invoked_function_arn, event, record_offset)
+        lambda_resp = _process_additional_items(
+            context.invoked_function_arn,
+            event,
+            record_offset,
+            this_run_record_latest_datetime,
+        )
         _logger.info('Invoked additional Lambda response: {}'.format(json.dumps(lambda_resp)))
-
-        s3_delete_resp = None
     else:
+        _put_s3_object(s3_bucket, LAST_ADM_RUN_TIME_STATE, str(this_run_record_latest_datetime))
         s3_delete_resp = _delete_s3_object(s3_bucket, s3_key)
-        lambda_resp = None
+        _logger.info('Deleted billing report: {}'.format(json.dumps(s3_delete_resp)))
         _logger.info('No additional records to process')
 
-
     resp = {
-        'sns': sns_resp,
-        'lambda': lambda_resp,
-        's3': {
-            'report_delete': s3_delete_resp,
-            'last_item_put': s3_last_item_resp
-        },
+        'records_published': published_line_items,
+        'record_offset': record_offset,
+        'total_records': total_line_items
     }
 
     _logger.info('AWS responses: {}'.format(json.dumps(resp)))
