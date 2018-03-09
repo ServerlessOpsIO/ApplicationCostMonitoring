@@ -4,7 +4,6 @@ plugins:
   - serverless-python-requirements
   - serverless-iam-roles-per-function
   - serverless-pseudo-parameters
-
 custom:
   stage: "${opt:stage, env:SLS_STAGE, 'dev'}"
   profile: "${opt:aws-profile, env:AWS_PROFILE, env:AWS_DEFAULT_PROFILE, 'default'}"
@@ -82,29 +81,6 @@ functions:
           rules:
             - suffix: ".csv"
 
-  S3BillingItemWriter:
-    handler: handlers/s3-billing-item-writer.handler
-    description: "Write billing data to an S3 bucket"
-    runtime: python3.6
-    memorySize: 128
-    timeout: 15
-    environment:
-      LOG_LEVEL: ${self:custom.log_level}
-      ARCHIVE_S3_BUCKET_NAME:
-        Ref: S3BillingItemWriterS3Bucket
-      S3_PREFIX: ${self:custom.billing_item_bucket_s3_prefix}
-    iamRoleStatements:
-      - Effect: "Allow"
-        Action:
-          - "S3:PutObject"
-        Resource:
-          Fn::Join:
-            - '/'
-            - - Fn::GetAtt:
-                - S3BillingItemWriterS3Bucket
-                - Arn
-              - '*'
-
 
 resources:
   Resources:
@@ -157,27 +133,6 @@ resources:
         Topics:
           - Ref: BillingRecordsSnsTopic
 
-    SnsConfirmSubscriptionIamManagedPolicy:
-      Type: "AWS::IAM::ManagedPolicy"
-      Properties:
-        Description: "Confirm SNS topic subscription"
-        PolicyDocument: {
-          "Version": "2012-10-17",
-          "Statement": [
-            {
-              "Effect": "Allow",
-              "Action": [
-                "sns:ConfirmSubscription"
-              ],
-              "Resource": [
-                {
-                  "Ref": "BillingRecordsSnsTopic"
-                }
-              ]
-            }
-          ]
-        }
-
     BillingS3BucketPolicy:
       Type: "AWS::S3::BucketPolicy"
       Properties:
@@ -213,126 +168,6 @@ resources:
           ]
         }
 
-    S3BillingItemWriterS3Bucket:
-      Type: "AWS::S3::Bucket"
-
-    SnsSubscriptionS3BillingItemWriter:
-      Type: 'AWS::SNS::Subscription'
-      Properties:
-        TopicArn:
-          Ref: BillingRecordsSnsTopic
-        Protocol: lambda
-        Endpoint:
-          Fn::GetAtt:
-            - S3BillingItemWriterLambdaFunction
-            - Arn
-
-    # Needed because we're not setting the SNS event in the function section.
-    S3BillingItemWriterLambdaPermission:
-      Type: 'AWS::Lambda::Permission'
-      Properties:
-        Action: "lambda:InvokeFunction"
-        FunctionName:
-          Ref: S3BillingItemWriterLambdaFunction
-        Principal: 'sns.amazonaws.com'
-        SourceArn:
-          Ref: BillingRecordsSnsTopic
-
-    AdmGlueDatabase:
-      Type: 'AWS::Glue::Database'
-      Properties:
-        DatabaseInput:
-          Description: 'Application Dollar Monitoring Data'
-          Name: 'application_dollar_monitoring'
-          LocationUri:
-            Fn::Join:
-              - '/'
-              - - 's3:/'
-                - Ref: S3BillingItemWriterS3Bucket
-                - '${self:custom.database_s3_prefix}'
-        CatalogId:
-          Ref: AWS::AccountId
-
-# NOTE: If we want to use the crawler then we can't create the table ourself.
-# We should rethink this at some point.  Until partitioning is figured out
-# we'll use the crawler.
-#    AdmBillingItemGlueTable:
-#      Type: 'AWS::Glue::Table'
-#      Properties:
-#        DatabaseName:
-#          Ref: AdmGlueDatabase
-#        CatalogId:
-#          Ref: AWS::AccountId
-#        TableInput:
-#          Name: '${self:custom.database_table_name}'
-#          Description: 'AWS bill line items'
-#          Parameters: {"classification": "json"}
-#          StorageDescriptor:
-#            Location:
-#              Fn::Join:
-#                - '/'
-#                - - 's3:/'
-#                  - Ref: S3BillingItemWriterS3Bucket
-#                  - '${self:custom.billing_item_bucket_s3_prefix}'
-#            InputFormat: 'org.apache.hadoop.mapred.TextInputFormat'
-#            OutputFormat: 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-#            SerdeInfo:
-#              SerializationLibrary: 'org.openx.data.jsonserde.JsonSerDe'
-
-    AdmLineItemCrawlerIamRole:
-      Type: 'AWS::IAM::Role'
-      Properties:
-        AssumeRolePolicyDocument:
-          Statement:
-            - Effect: 'Allow'
-              Principal:
-                Service:
-                  - 'glue.amazonaws.com'
-              Action:
-                - 'sts:AssumeRole'
-        ManagedPolicyArns:
-          - 'arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole'
-        Policies:
-          - PolicyName: '${self:service}-${self:provider.stage}-crawler'
-            PolicyDocument:
-              Statement:
-                - Effect: 'Allow'
-                  Action:
-                    - 's3:GetObject'
-                    - 's3:PutObject'
-                  Resource:
-                    - Fn::Join:
-                      - '/'
-                      - - Fn::GetAtt:
-                          - S3BillingItemWriterS3Bucket
-                          - Arn
-                        - '${self:custom.billing_item_bucket_s3_prefix}'
-                        - '*'
-
-    AdmLineItemCrawler:
-      Type: 'AWS::Glue::Crawler'
-      Properties:
-        Role:
-          Fn::GetAtt:
-            - AdmLineItemCrawlerIamRole
-            - Arn
-        DatabaseName:
-          Ref: AdmGlueDatabase
-        Targets:
-          S3Targets:
-            - Path:
-                Fn::Join:
-                  - '/'
-                  - - 's3:/'
-                    - Ref: S3BillingItemWriterS3Bucket
-                    - '${self:custom.billing_item_bucket_s3_prefix}'
-        SchemaChangePolicy:
-          UpdateBehavior: "UPDATE_IN_DATABASE"
-          DeleteBehavior: "DEPRECATE_IN_DATABASE"
-        Schedule:
-          ScheduleExpression: "cron(15 1/6 * * ? *)"
-
-
   Outputs:
     BillingReportS3BucketName:
       Description: "S3 bucket where billing reports are delivered to."
@@ -347,11 +182,4 @@ resources:
         Ref: BillingRecordsSnsTopic
       Export:
         Name: "${self:service}-${self:provider.stage}-BillingRecordsSnsTopicArn"
-
-    S3BillingItemWriterBucketName:
-      Description: "S3 bucket where billing reports are delivered to."
-      Value:
-        Ref: S3BillingItemWriterS3Bucket
-      Export:
-        Name: "${self:service}-${self:provider.stage}-S3BillingItemWriterBucketName"
 
