@@ -217,9 +217,24 @@ def handler(event, context):
         line_item_start, line_item_end = _get_line_item_time_interval(line_item_msg)
         line_item_start_datetime = iso8601.parse_date(line_item_start)
 
-        # First of month line items get appended through month and data can
-        # change on old ones.
+        # XXX: AWS does not guarantee that data will not change across across
+        # billing reports.  There are two ways to easily observe this fact:
+        #
+        # - AmazonSNS and AmazonS3 BlendedRate will change across runs for the
+        #   same line item
+        # - Additional line items will be added to the first of the month
+        #   throughout the month.
+        #
+        # We should probably do an end of month reconciliation run. Reports
+        # are generated up to three times a day.  If we tried to do this
+        # automatically this could be problematic depending on the size of the
+        # report and the downstream publishers.
+
+        # First of month line items get appended through the month.
         is_first_of_month_line_item = line_item_start_datetime.day == 1
+
+        # XXX: Appears so far that each report always starts with a new
+        # time period.
         is_newer_than_last_run = line_item_start_datetime > last_run_record_latest_datetime
 
         if is_newer_than_last_run or is_first_of_month_line_item:
