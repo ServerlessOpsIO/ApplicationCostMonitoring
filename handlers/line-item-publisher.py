@@ -24,8 +24,15 @@ sns_client = boto3.client('sns')
 lambda_client = boto3.client('lambda')
 
 
-class BillingReportSchemaChange(Exception):
+class LineItemPublisherError(Exception):
+    '''Lambda base exception'''
     pass
+
+class BillingReportSchemaChangeError(LineItemPublisherError):
+    '''Billing report schema change'''
+    def __init__(self):
+        self.msg = 'Detected billing report schema change'
+        super(LineItemPublisherError, self).__init__(self.msg)
 
 
 def _check_report_schema_change(record_headers, old_record_headers):
@@ -187,7 +194,7 @@ def handler(event, context):
         else:
             old_record_headers = _get_s3_object_body(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE)
             if not _check_report_schema_change(record_headers, old_record_headers):
-                raise BillingReportSchemaChange('Schema mismatch')
+                raise BillingReportSchemaChangeError
 
     # Get last run latest time.
     if not _check_s3_object_exists(s3_bucket, LAST_ADM_RUN_TIME_STATE):
