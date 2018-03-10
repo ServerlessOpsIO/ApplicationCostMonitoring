@@ -53,15 +53,15 @@ class InvalidSchemaChangeOptionError(LineItemPublisherError):
         super(LineItemPublisherError, self).__init__(self.msg)
 
 
-def _check_report_schema_change(record_headers, old_record_headers):
+def _check_report_schema_change(line_item_headers, old_line_item_headers):
     '''Compare a line_item doc with a set of headers.'''
     # We're not going to assume that columns are always in the same position.
-    record_headers_list = record_headers.split(',')
-    record_headers_list.sort()
+    line_item_headers_list = line_item_headers.split(',')
+    line_item_headers_list.sort()
 
-    old_record_headers_list = old_record_headers.split(',')
-    old_record_headers_list.sort()
-    return record_headers_list == old_record_headers_list
+    old_line_item_headers_list = old_line_item_headers.split(',')
+    old_line_item_headers_list.sort()
+    return line_item_headers_list == old_line_item_headers_list
 
 
 def _check_s3_object_exists(s3_bucket, s3_key):
@@ -72,7 +72,7 @@ def _check_s3_object_exists(s3_bucket, s3_key):
     )
 
     exists = False
-    if 'Contents'in resp:
+    if 'Contents' in resp:
         for k in resp.get('Contents'):
             if k.get('Key') == s3_key:
                 exists = True
@@ -148,9 +148,9 @@ def _format_line_item_dict(line_item_dict):
     return formatted_line_item_dict
 
 
-def _process_additional_items(arn, event, record_offset, this_latest_datetime):
+def _process_additional_items(arn, event, line_item_offset, this_latest_datetime):
     '''Process additional records.'''
-    event.get('Records')[0][X_RECORD_OFFSET] = record_offset
+    event.get('Records')[0][X_RECORD_OFFSET] = line_item_offset
     event.get('Records')[0][X_RECORD_LATEST_DATE] = str(this_latest_datetime)
 
     resp = lambda_client.invoke(
@@ -194,9 +194,10 @@ def handler(event, context):
     s3_bucket = event.get('Records')[0].get('s3').get('bucket').get('name')
     s3_key = event.get('Records')[0].get('s3').get('object').get('key')
 
-    record_offset = event.get('Records')[0].get(X_RECORD_OFFSET)
+    line_item_offset = event.get('Records')[0].get(X_RECORD_OFFSET)
     this_run_record_latest_date = event.get('Records')[0].get(X_RECORD_LATEST_DATE, '1970-01-01T00:00:00Z')
     this_run_record_latest_datetime = iso8601.parse_date(this_run_record_latest_date)
+
 
     s3_object_body = _get_s3_object_body(s3_bucket, s3_key)
     s3_body_file = io.StringIO(s3_object_body)
@@ -204,20 +205,20 @@ def handler(event, context):
     # FIXME: This block has caused us to need to allocate more memory. We
     # should get more efficient with this.
     # Get header so we can format messages.
-    record_headers = s3_body_file.readline()
+    line_item_headers = s3_body_file.readline()
     line_items = s3_body_file.readlines()
     total_line_items = len(line_items)
     _logger.info('Total items: {}'.format(total_line_items))
 
     # This is an initial processing run of a given report.
-    if record_offset is None:
+    if line_item_offset is None:
         # Write schema if none exists.
         if not _check_s3_object_exists(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE):
-            _put_s3_object(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE, record_headers)
+            _put_s3_object(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE, line_item_headers)
         # If we should error on change, check change
         else:
-            old_record_headers = _get_s3_object_body(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE)
-            if not _check_report_schema_change(record_headers, old_record_headers):
+            old_line_item_headers = _get_s3_object_body(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE)
+            if not _check_report_schema_change(line_item_headers, old_line_item_headers):
                 if SCHEMA_CHANGE_HANDLING == SCHEMA_CHANGE_ERROR:
                     raise BillingReportSchemaChangeError
 
@@ -235,21 +236,21 @@ def handler(event, context):
         last_run_record_latest_datetime = iso8601.parse_date(last_run_record_latest_date)
     _logger.info('Processing line items since: {}'.format(last_run_record_latest_datetime))
 
-    if record_offset is None:
-        record_offset = 0
+    if line_item_offset is None:
+        line_item_offset = 0
 
-    line_items = line_items[record_offset:]
+    line_items = line_items[line_item_offset:]
 
 
     # NOTE: We might decide to batch send multiple records at a time.  It's
     # Worth a look after we have decent metrics to understand tradeoffs.
     published_line_items = 0
-    record_headers_list = record_headers.split(',')
+    line_item_headers_list = line_item_headers.split(',')
     for line_item in line_items:
         _logger.debug('line_item: {}'.format(line_item))
 
         stripped_line_item = line_item.strip()
-        line_item_msg = _create_line_item_message(record_headers_list, stripped_line_item)
+        line_item_msg = _create_line_item_message(line_item_headers_list, stripped_line_item)
         _logger.debug('message: {}'.format(json.dumps(line_item_msg)))
 
         line_item_start, line_item_end = _get_line_item_time_interval(line_item_msg)
@@ -276,18 +277,18 @@ def handler(event, context):
         is_newer_than_last_run = line_item_start_datetime > last_run_record_latest_datetime
 
         if is_newer_than_last_run or is_first_of_month_line_item:
-            _logger.info('Publishing line_item: {}/{}'.format(record_offset + 1, total_line_items))
+            _logger.info('Publishing line_item: {}/{}'.format(line_item_offset + 1, total_line_items))
             resp = _publish_sns_message(AWS_SNS_TOPIC, line_item_msg)
             _logger.debug(
                 'Publish response for line_item {}: {}'.format(
-                    record_offset, json.dumps(resp)
+                    line_item_offset, json.dumps(resp)
                 )
             )
             published_line_items += 1
             if line_item_start_datetime > this_run_record_latest_datetime:
                 this_run_record_latest_datetime = line_item_start_datetime
 
-        record_offset += 1
+        line_item_offset += 1
 
         if context.get_remaining_time_in_millis() <= 2000:
             break
@@ -295,12 +296,12 @@ def handler(event, context):
     # We're done.  Remove file.
     # FIXME: Need a better way to check for processing same report than using
     # -1 as the offset.
-    if record_offset < total_line_items:
-        _logger.info('Invoking additional execution at record offset: {}'.format(record_offset))
+    if line_item_offset < total_line_items:
+        _logger.info('Invoking additional execution at record offset: {}'.format(line_item_offset))
         lambda_resp = _process_additional_items(
             context.invoked_function_arn,
             event,
-            record_offset,
+            line_item_offset,
             this_run_record_latest_datetime,
         )
         _logger.info('Invoked additional Lambda response: {}'.format(json.dumps(lambda_resp)))
@@ -316,7 +317,7 @@ def handler(event, context):
 
     resp = {
         'records_published': published_line_items,
-        'record_offset': record_offset,
+        'line_item_offset': line_item_offset,
         'total_records': total_line_items
     }
 
