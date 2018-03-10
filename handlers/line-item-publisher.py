@@ -305,10 +305,14 @@ def handler(event, context):
         )
         _logger.info('Invoked additional Lambda response: {}'.format(json.dumps(lambda_resp)))
     else:
-        _put_s3_object(s3_bucket, LAST_ADM_RUN_TIME_STATE, str(this_run_record_latest_datetime))
         s3_delete_resp = _delete_s3_object(s3_bucket, s3_key)
         _logger.info('Deleted billing report: {}'.format(json.dumps(s3_delete_resp)))
         _logger.info('No additional records to process')
+
+        # Since we always process the 1st of the month, only write if report
+        # is later than last run datetime.
+        if this_run_record_latest_datetime > last_run_record_latest_datetime:
+            _put_s3_object(s3_bucket, LAST_ADM_RUN_TIME_STATE, str(this_run_record_latest_datetime))
 
     resp = {
         'records_published': published_line_items,
