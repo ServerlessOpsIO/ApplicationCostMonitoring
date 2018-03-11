@@ -26,7 +26,7 @@ LAST_ADM_RUN_TIME_STATE = 'LAST_ADM_RUN_TIME_STATE'
 LAST_ADM_RUN_SCHEMA_STATE = 'LAST_ADM_RUN_SCHEMA_STATE'
 
 log_level = os.environ.get('LOG_LEVEL', 'INFO')
-logging.root.setLevel(logging.getLevelName(log_level))
+logging.root.setLevel(logging.getLevelName(log_level))  # type: ignore
 _logger = logging.getLogger(__name__)
 
 s3_client = boto3.client('s3')
@@ -222,7 +222,6 @@ def handler(event, context):
                 if SCHEMA_CHANGE_HANDLING == SCHEMA_CHANGE_ERROR:
                     raise BillingReportSchemaChangeError
 
-
     # Get last run latest time.
     if SCHEMA_CHANGE_HANDLING == SCHEMA_CHANGE_RECONCILE:
         last_run_record_latest_date = '1970-01-01T00:00:00Z'
@@ -240,7 +239,6 @@ def handler(event, context):
         line_item_offset = 0
 
     line_items = line_items[line_item_offset:]
-
 
     # NOTE: We might decide to batch send multiple records at a time.  It's
     # Worth a look after we have decent metrics to understand tradeoffs.
