@@ -8,6 +8,16 @@ import logging
 import os
 
 AWS_SNS_TOPIC = os.environ.get('AWS_SNS_TOPIC')
+SCHEMA_CHANGE_HANDLING = os.environ.get('SCHEMA_CHANGE_HANDLING')
+
+SCHEMA_CHANGE_ERROR = 'ERROR'
+SCHEMA_CHANGE_CONTINUE = 'CONTINUE'
+SCHEMA_CHANGE_RECONCILE = 'RECONCILE'
+SCHEMA_CHANGE_OPTIONS = [
+    SCHEMA_CHANGE_ERROR,
+    SCHEMA_CHANGE_CONTINUE,
+    SCHEMA_CHANGE_RECONCILE
+]
 
 X_RECORD_OFFSET = 'x-record-offset'
 X_RECORD_LATEST_DATE = 'x-record-latest-date'
@@ -24,8 +34,23 @@ sns_client = boto3.client('sns')
 lambda_client = boto3.client('lambda')
 
 
-class BillingReportSchemaChange(Exception):
+class LineItemPublisherError(Exception):
+    '''Lambda base exception'''
     pass
+
+
+class BillingReportSchemaChangeError(LineItemPublisherError):
+    '''Billing report schema change'''
+    def __init__(self):
+        self.msg = 'Detected billing report schema change'
+        super(LineItemPublisherError, self).__init__(self.msg)
+
+
+class InvalidSchemaChangeOptionError(LineItemPublisherError):
+    '''Invalid schema change option'''
+    def __init__(self, option):
+        self.msg = '{} not in {}'.format(option, SCHEMA_CHANGE_OPTIONS)
+        super(LineItemPublisherError, self).__init__(self.msg)
 
 
 def _check_report_schema_change(record_headers, old_record_headers):
@@ -161,6 +186,11 @@ def _put_s3_object(s3_bucket, s3_key, body):
 
 def handler(event, context):
     _logger.info('S3 event received: {}'.format(json.dumps(event)))
+
+    # Raise an error if we don't know how to handle schema changes
+    if SCHEMA_CHANGE_HANDLING not in SCHEMA_CHANGE_OPTIONS:
+        raise InvalidSchemaChangeOptionError(SCHEMA_CHANGE_HANDLING)
+
     s3_bucket = event.get('Records')[0].get('s3').get('bucket').get('name')
     s3_key = event.get('Records')[0].get('s3').get('object').get('key')
 
@@ -181,30 +211,38 @@ def handler(event, context):
 
     # This is an initial processing run of a given report.
     if record_offset is None:
-        # Check for a billing report schema change.
+        # Write schema if none exists.
         if not _check_s3_object_exists(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE):
             _put_s3_object(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE, record_headers)
+        # If we should error on change, check change
         else:
             old_record_headers = _get_s3_object_body(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE)
             if not _check_report_schema_change(record_headers, old_record_headers):
-                raise BillingReportSchemaChange('Schema mismatch')
+                if SCHEMA_CHANGE_HANDLING == SCHEMA_CHANGE_ERROR:
+                    raise BillingReportSchemaChangeError
+
 
     # Get last run latest time.
-    if not _check_s3_object_exists(s3_bucket, LAST_ADM_RUN_TIME_STATE):
+    if SCHEMA_CHANGE_HANDLING == SCHEMA_CHANGE_RECONCILE:
         last_run_record_latest_date = '1970-01-01T00:00:00Z'
-        _put_s3_object(s3_bucket, LAST_ADM_RUN_TIME_STATE, last_run_record_latest_date)
+        last_run_record_latest_datetime = iso8601.parse_date(last_run_record_latest_date)
     else:
-        last_run_record_latest_date = _get_s3_object_body(s3_bucket, LAST_ADM_RUN_TIME_STATE).strip()
-    last_run_record_latest_datetime = iso8601.parse_date(last_run_record_latest_date)
+        if not _check_s3_object_exists(s3_bucket, LAST_ADM_RUN_TIME_STATE):
+            last_run_record_latest_date = '1970-01-01T00:00:00Z'
+            _put_s3_object(s3_bucket, LAST_ADM_RUN_TIME_STATE, last_run_record_latest_date)
+        else:
+            last_run_record_latest_date = _get_s3_object_body(s3_bucket, LAST_ADM_RUN_TIME_STATE).strip()
+        last_run_record_latest_datetime = iso8601.parse_date(last_run_record_latest_date)
+    _logger.info('Processing line items since: {}'.format(last_run_record_latest_datetime))
 
     if record_offset is None:
         record_offset = 0
 
     line_items = line_items[record_offset:]
 
+
     # NOTE: We might decide to batch send multiple records at a time.  It's
     # Worth a look after we have decent metrics to understand tradeoffs.
-
     published_line_items = 0
     record_headers_list = record_headers.split(',')
     for line_item in line_items:
@@ -217,9 +255,24 @@ def handler(event, context):
         line_item_start, line_item_end = _get_line_item_time_interval(line_item_msg)
         line_item_start_datetime = iso8601.parse_date(line_item_start)
 
-        # First of month line items get appended through month and data can
-        # change on old ones.
+        # XXX: AWS does not guarantee that data will not change across across
+        # billing reports.  There are two ways to easily observe this fact:
+        #
+        # - AmazonSNS and AmazonS3 BlendedRate will change across runs for the
+        #   same line item
+        # - Additional line items will be added to the first of the month
+        #   throughout the month.
+        #
+        # We should probably do an end of month reconciliation run. Reports
+        # are generated up to three times a day.  If we tried to do this
+        # automatically this could be problematic depending on the size of the
+        # report and the downstream publishers.
+
+        # First of month line items get appended through the month.
         is_first_of_month_line_item = line_item_start_datetime.day == 1
+
+        # XXX: Appears so far that each report always starts with a new
+        # time period.
         is_newer_than_last_run = line_item_start_datetime > last_run_record_latest_datetime
 
         if is_newer_than_last_run or is_first_of_month_line_item:
@@ -252,10 +305,14 @@ def handler(event, context):
         )
         _logger.info('Invoked additional Lambda response: {}'.format(json.dumps(lambda_resp)))
     else:
-        _put_s3_object(s3_bucket, LAST_ADM_RUN_TIME_STATE, str(this_run_record_latest_datetime))
         s3_delete_resp = _delete_s3_object(s3_bucket, s3_key)
         _logger.info('Deleted billing report: {}'.format(json.dumps(s3_delete_resp)))
         _logger.info('No additional records to process')
+
+        # Since we always process the 1st of the month, only write if report
+        # is later than last run datetime.
+        if this_run_record_latest_datetime > last_run_record_latest_datetime:
+            _put_s3_object(s3_bucket, LAST_ADM_RUN_TIME_STATE, str(this_run_record_latest_datetime))
 
     resp = {
         'records_published': published_line_items,
