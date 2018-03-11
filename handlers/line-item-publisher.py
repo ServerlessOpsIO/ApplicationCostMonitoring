@@ -56,12 +56,15 @@ class InvalidSchemaChangeOptionError(LineItemPublisherError):
 def _check_report_schema_change(line_item_headers, old_line_item_headers):
     '''Compare a line_item doc with a set of headers.'''
     # We're not going to assume that columns are always in the same position.
-    line_item_headers_list = line_item_headers.split(',')
-    line_item_headers_list.sort()
+    # As a result, we need to make copies of the list here or we're going to
+    # have a bad time matching headers and line item data.
+    tmp_line_item_headers = line_item_headers[:]
+    tmp_old_line_item_headers = old_line_item_headers[:]
 
-    old_line_item_headers_list = old_line_item_headers.split(',')
-    old_line_item_headers_list.sort()
-    return line_item_headers_list == old_line_item_headers_list
+    tmp_line_item_headers.sort()
+    tmp_old_line_item_headers.sort()
+
+    return tmp_line_item_headers == tmp_old_line_item_headers
 
 
 def _check_s3_object_exists(s3_bucket, s3_key):
@@ -102,6 +105,33 @@ def _create_line_item_message(headers, line_item):
     final_dict = _format_line_item_dict(sanitized_item_dict)
 
     return final_dict
+
+
+def _get_last_run_datetime_from_s3(s3_bucket, schema_change_handling):
+    '''Return datetime of the last run'''
+    if schema_change_handling == SCHEMA_CHANGE_RECONCILE:
+        last_run_record_latest_date = '1970-01-01T00:00:00Z'
+        last_run_record_latest_datetime = iso8601.parse_date(last_run_record_latest_date)
+    else:
+        if not _check_s3_object_exists(s3_bucket, LAST_ADM_RUN_TIME_STATE):
+            last_run_record_latest_date = '1970-01-01T00:00:00Z'
+            _put_s3_object(s3_bucket, LAST_ADM_RUN_TIME_STATE, last_run_record_latest_date)
+        else:
+            last_run_record_latest_date = _get_s3_object_body(s3_bucket, LAST_ADM_RUN_TIME_STATE).strip()
+        last_run_record_latest_datetime = iso8601.parse_date(last_run_record_latest_date)
+
+    return last_run_record_latest_datetime
+
+
+def _get_line_items_from_s3(s3_bucket, s3_key):
+    '''Return the line items from the S3 bucket.'''
+    s3_object_body = _get_s3_object_body(s3_bucket, s3_key)
+    s3_body_file = io.StringIO(s3_object_body)
+
+    line_item_headers = s3_body_file.readline().split(',')
+    line_items = s3_body_file.readlines()
+
+    return (line_item_headers, line_items)
 
 
 def _get_line_item_time_interval(line_item):
@@ -198,15 +228,7 @@ def handler(event, context):
     this_run_record_latest_date = event.get('Records')[0].get(X_RECORD_LATEST_DATE, '1970-01-01T00:00:00Z')
     this_run_record_latest_datetime = iso8601.parse_date(this_run_record_latest_date)
 
-
-    s3_object_body = _get_s3_object_body(s3_bucket, s3_key)
-    s3_body_file = io.StringIO(s3_object_body)
-
-    # FIXME: This block has caused us to need to allocate more memory. We
-    # should get more efficient with this.
-    # Get header so we can format messages.
-    line_item_headers = s3_body_file.readline()
-    line_items = s3_body_file.readlines()
+    line_item_headers, line_items = _get_line_items_from_s3(s3_bucket, s3_key)
     total_line_items = len(line_items)
     _logger.info('Total items: {}'.format(total_line_items))
 
@@ -214,25 +236,19 @@ def handler(event, context):
     if line_item_offset is None:
         # Write schema if none exists.
         if not _check_s3_object_exists(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE):
-            _put_s3_object(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE, line_item_headers)
+            _put_s3_object(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE, ','.join(line_item_headers))
         # If we should error on change, check change
         else:
-            old_line_item_headers = _get_s3_object_body(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE)
+            old_line_item_headers = _get_s3_object_body(s3_bucket, LAST_ADM_RUN_SCHEMA_STATE).split(',')
             if not _check_report_schema_change(line_item_headers, old_line_item_headers):
                 if SCHEMA_CHANGE_HANDLING == SCHEMA_CHANGE_ERROR:
                     raise BillingReportSchemaChangeError
 
     # Get last run latest time.
-    if SCHEMA_CHANGE_HANDLING == SCHEMA_CHANGE_RECONCILE:
-        last_run_record_latest_date = '1970-01-01T00:00:00Z'
-        last_run_record_latest_datetime = iso8601.parse_date(last_run_record_latest_date)
-    else:
-        if not _check_s3_object_exists(s3_bucket, LAST_ADM_RUN_TIME_STATE):
-            last_run_record_latest_date = '1970-01-01T00:00:00Z'
-            _put_s3_object(s3_bucket, LAST_ADM_RUN_TIME_STATE, last_run_record_latest_date)
-        else:
-            last_run_record_latest_date = _get_s3_object_body(s3_bucket, LAST_ADM_RUN_TIME_STATE).strip()
-        last_run_record_latest_datetime = iso8601.parse_date(last_run_record_latest_date)
+    last_run_record_latest_datetime = _get_last_run_datetime_from_s3(
+        s3_bucket,
+        SCHEMA_CHANGE_HANDLING
+    )
     _logger.info('Processing line items since: {}'.format(last_run_record_latest_datetime))
 
     if line_item_offset is None:
@@ -243,12 +259,11 @@ def handler(event, context):
     # NOTE: We might decide to batch send multiple records at a time.  It's
     # Worth a look after we have decent metrics to understand tradeoffs.
     published_line_items = 0
-    line_item_headers_list = line_item_headers.split(',')
     for line_item in line_items:
         _logger.debug('line_item: {}'.format(line_item))
 
         stripped_line_item = line_item.strip()
-        line_item_msg = _create_line_item_message(line_item_headers_list, stripped_line_item)
+        line_item_msg = _create_line_item_message(line_item_headers, stripped_line_item)
         _logger.debug('message: {}'.format(json.dumps(line_item_msg)))
 
         line_item_start, line_item_end = _get_line_item_time_interval(line_item_msg)
