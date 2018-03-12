@@ -67,7 +67,8 @@ functions:
       - existingS3:
           bucket:
             Ref: BillingReportBucket
-          event: "s3:ObjectCreated:Put"
+          events:
+            - "s3:ObjectCreated:Put"
           rules:
             - suffix: ".gz"
 
