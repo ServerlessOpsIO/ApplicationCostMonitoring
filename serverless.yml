@@ -69,6 +69,12 @@ functions:
           event: "s3:ObjectCreated:Put"
           rules:
             - suffix: ".gz"
+      - s3:
+          # NOTE: Need to use string here.
+          bucket: '${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}'
+          event: "s3:ObjectCreated:Put"
+          rules:
+            - suffix: ".zip"
 
 
 resources:
