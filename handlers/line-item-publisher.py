@@ -1,11 +1,13 @@
 '''Fetch object from S3 and publish items to SNS'''
 
 import boto3
+import gzip
 import io
 import iso8601
 import json
 import logging
 import os
+import zipfile
 
 AWS_SNS_TOPIC = os.environ.get('AWS_SNS_TOPIC')
 SCHEMA_CHANGE_HANDLING = os.environ.get('SCHEMA_CHANGE_HANDLING')
@@ -107,6 +109,19 @@ def _create_line_item_message(headers, line_item):
     return final_dict
 
 
+def _decompress_s3_object_body(s3_body, s3_key):
+    '''Return the decompressed data of an S3 object.'''
+    if s3_key.endswith('.gz'):
+        gzip_file = gzip.GzipFile(fileobj=io.BytesIO(s3_body.read()))
+        decompressed_s3_body = gzip_file.read().decode()
+    else:
+        decompress_s3_key = '.'.join(s3_key.split('.')[:-1])
+        zip_file = zipfile.ZipFile(io.BytesIO(s3_body.read()))
+        decompressed_s3_body = zip_file.read(decompress_s3_key).decode()
+
+    return decompressed_s3_body
+
+
 def _get_last_run_datetime_from_s3(s3_bucket, schema_change_handling):
     '''Return datetime of the last run'''
     if schema_change_handling == SCHEMA_CHANGE_RECONCILE:
@@ -126,7 +141,8 @@ def _get_last_run_datetime_from_s3(s3_bucket, schema_change_handling):
 def _get_line_items_from_s3(s3_bucket, s3_key):
     '''Return the line items from the S3 bucket.'''
     s3_object_body = _get_s3_object_body(s3_bucket, s3_key)
-    s3_body_file = io.StringIO(s3_object_body)
+    s3_object_body_decompressed = _decompress_s3_object_body(s3_object_body, s3_key)
+    s3_body_file = io.StringIO(s3_object_body_decompressed)
 
     line_item_headers = s3_body_file.readline().split(',')
     line_items = s3_body_file.readlines()
