@@ -50,6 +50,9 @@ functions:
       - Effect: "Allow"
         Action:
           - "s3:ListBucket"
+        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}"
+      - Effect: "Allow"
+        Action:
           - "S3:GetObject"
           - "S3:PutObject"
         Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}/*"
