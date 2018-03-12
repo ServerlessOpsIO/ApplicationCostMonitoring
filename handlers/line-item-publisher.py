@@ -140,7 +140,7 @@ def _get_last_run_datetime_from_s3(s3_bucket, schema_change_handling):
 
 def _get_line_items_from_s3(s3_bucket, s3_key):
     '''Return the line items from the S3 bucket.'''
-    s3_object_body = _get_s3_object_body(s3_bucket, s3_key)
+    s3_object_body = _get_s3_object_body(s3_bucket, s3_key, decode_bytes=False)
     s3_object_body_decompressed = _decompress_s3_object_body(s3_object_body, s3_key)
     s3_body_file = io.StringIO(s3_object_body_decompressed)
 
@@ -165,7 +165,7 @@ def _delete_s3_object(s3_bucket, s3_key):
     return resp
 
 
-def _get_s3_object_body(s3_bucket, s3_key):
+def _get_s3_object_body(s3_bucket, s3_key, decode_bytes=True):
     '''Get object body from S3.'''
     s3_object = s3_client.get_object(
         Bucket=s3_bucket,
@@ -173,6 +173,8 @@ def _get_s3_object_body(s3_bucket, s3_key):
     )
 
     s3_object_body = s3_object.get('Body').read()
+    if decode_bytes is True:
+        s3_object_body = s3_object_body.decode()
 
     return s3_object_body
 
@@ -335,8 +337,6 @@ def handler(event, context):
         )
         _logger.info('Invoked additional Lambda response: {}'.format(json.dumps(lambda_resp)))
     else:
-        s3_delete_resp = _delete_s3_object(s3_bucket, s3_key)
-        _logger.info('Deleted billing report: {}'.format(json.dumps(s3_delete_resp)))
         _logger.info('No additional records to process')
 
         # Since we always process the 1st of the month, only write if report
