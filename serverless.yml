@@ -12,18 +12,20 @@ custom:
   log_level: "${env:LOG_LEVEL, 'INFO'}"
   database_s3_prefix: 'aws-adm'
   database_table_name: 'line_items'
-  # Changing tags on billing reports will alter the report schema which can:
-  # - break downstream analysis systems dependent on the schema.
-  # - result in item duplication as AWS will generate a new line item ID and
-  #   this system has to continually reprocess 1st of month on every run.
-  # - make tracking an item across the month difficult due to change in ID.
-  #
-  # Options:
-  # - ERROR: Error out line item writer. Must remove schema state file or
-  #   remove tags to continue processing.
-  # - CONTINUE: Just continue processing.
-  # - RECONCILE: Reprocess the entire report.
-  schema_change_handling: "${env:SCHEMA_CHANGE_HANDLING, 'CONTINUE'}"
+
+  cf-parameters:
+    # Changing tags on billing reports will alter the report schema which can:
+    # - break downstream analysis systems dependent on the schema.
+    # - result in item duplication as AWS will generate a new line item ID and
+    #   this system has to continually reprocess 1st of month on every run.
+    # - make tracking an item across the month difficult due to change in ID.
+    #
+    # Options:
+    # - ERROR: Error out line item writer. Must remove schema state file or
+    #   remove tags to continue processing.
+    # - CONTINUE: Just continue processing.
+    # - RECONCILE: Reprocess the entire report.
+    schema_change_handling: "${env:SCHEMA_CHANGE_HANDLING, 'CONTINUE'}"
 
 provider:
   name: aws
@@ -67,7 +69,8 @@ functions:
       LOG_LEVEL: ${self:custom.log_level}
       AWS_SNS_TOPIC:
         Ref: BillingRecordsSnsTopic
-      SCHEMA_CHANGE_HANDLING: '${self:custom.schema_change_handling}'
+      SCHEMA_CHANGE_HANDLING:
+        Ref: SchemaChangeHandling
     iamRoleStatements:
       - Effect: "Allow"
         Action:
@@ -97,6 +100,12 @@ functions:
 
 
 resources:
+  Parameters:
+    SchemaChangeHandling:
+      Type: String
+      Description: 'Behavior by LineItemPublish function on report schema change.'
+      Default: '${self:custom.cf-parameters.schema_change_handling}'
+
   Resources:
     BillingRecordsSnsTopic:
       Type: "AWS::SNS::Topic"
