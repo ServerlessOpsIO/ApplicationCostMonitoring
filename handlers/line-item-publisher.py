@@ -112,11 +112,11 @@ def _create_line_item_message(headers, line_item):
 def _decompress_s3_object_body(s3_body, s3_key):
     '''Return the decompressed data of an S3 object.'''
     if s3_key.endswith('.gz'):
-        gzip_file = gzip.GzipFile(fileobj=io.BytesIO(s3_body.read()))
+        gzip_file = gzip.GzipFile(fileobj=io.BytesIO(s3_body))
         decompressed_s3_body = gzip_file.read().decode()
     else:
         decompress_s3_key = '.'.join(s3_key.split('.')[:-1])
-        zip_file = zipfile.ZipFile(io.BytesIO(s3_body.read()))
+        zip_file = zipfile.ZipFile(io.BytesIO(s3_body))
         decompressed_s3_body = zip_file.read(decompress_s3_key).decode()
 
     return decompressed_s3_body
@@ -172,7 +172,7 @@ def _get_s3_object_body(s3_bucket, s3_key):
         Key=s3_key
     )
 
-    s3_object_body = s3_object.get('Body').read().decode()
+    s3_object_body = s3_object.get('Body').read()
 
     return s3_object_body
 
