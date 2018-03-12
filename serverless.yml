@@ -4,6 +4,8 @@ plugins:
   - serverless-python-requirements
   - serverless-iam-roles-per-function
   - serverless-pseudo-parameters
+  - serverless-sam
+
 custom:
   stage: "${opt:stage, env:SLS_STAGE, 'dev'}"
   profile: "${opt:aws-profile, env:AWS_PROFILE, env:AWS_DEFAULT_PROFILE, 'default'}"
