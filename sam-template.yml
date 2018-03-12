@@ -8,10 +8,22 @@ Resources:
     Type: 'AWS::Serverless::Function'
     Properties:
       Handler: handlers/line-item-publisher.handler
-      CodeUri: /Users/tom/Source/serverlessops/aws-adm/.serverless/aws-adm.zip
+      CodeUri: s3://%%S3_BUCKET%%/%%S3_DEPLOY_ARTIFACT%%
       Description: Ingest an S3 object and publish line items.
       MemorySize: 512
       Timeout: 300
+      Policies:
+        Statement:
+          # FIXME: We need S3 delete
+          - S3CrudPolicy:
+              bucketName:
+                Ref: AdmStateS3Bucket
+          - SNSPublishMessagePolicy:
+              topicName:
+                Ref: BillingRecordsSnsTopic
+          - LambdaInvokePolicy:
+              functionName:
+                Ref: LineItemPublish
       Environment:
         Variables:
           LOG_LEVEL: INFO
@@ -23,11 +35,17 @@ Resources:
         Event1:
           Type: S3
           Properties:
-            Bucket:
-              Ref: BillingReportBucket
+            Bucket: 'aws-adm-prime-billing-reports-#{AWS::AccountId}'
             Events: 's3:ObjectCreated:Put'
             Filter:
               - suffix: .gz
+        Event2:
+          Type: S3
+          Properties:
+            Bucket: 'aws-adm-prime-billing-reports-#{AWS::AccountId}'
+            Events: 's3:ObjectCreated:Put'
+            Filter:
+              - suffix: .zip
 Outputs:
   BillingRecordsSnsTopicArn:
     Description: SNS topic ARN where billing records are published to.
