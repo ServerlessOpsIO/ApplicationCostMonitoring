@@ -64,7 +64,7 @@ functions:
           - "Lambda:InvokeFunction"
         Resource: "arn:aws:lambda:${self:provider.region}:#{AWS::AccountId}:function:${self:service}-${self:provider.stage}-LineItemPublish"
     events:
-      - s3:
+      - existingS3:
           bucket:
             Ref: BillingReportBucket
           event: "s3:ObjectCreated:Put"
