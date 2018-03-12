@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: 'SAM template for Serverless framework service: Application Dollar Monitoring'
+Resources:
+  BillingRecordsSnsTopic:
+    Type: 'AWS::SNS::Topic'
+  SnsTopicPolicy:
+    Type: 'AWS::SNS::TopicPolicy'
+    Properties:
+      PolicyDocument:
+        Version: '2008-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - 'SNS:GetTopicAttributes'
+              - 'SNS:SetTopicAttributes'
+              - 'SNS:AddPermission'
+              - 'SNS:RemovePermission'
+              - 'SNS:DeleteTopic'
+              - 'SNS:Subscribe'
+              - 'SNS:ListSubscriptionsByTopic'
+              - 'SNS:Publish'
+              - 'SNS:Receive'
+            Resource:
+              'Fn::Join':
+                - ':'
+                - - 'arn:aws:sns'
+                  - Ref: 'AWS::Region'
+                  - Ref: 'AWS::AccountId'
+                  - 'Fn::GetAtt':
+                      - BillingRecordsSnsTopic
+                      - TopicName
+            Condition:
+              StringEquals:
+                'AWS:SourceOwner':
+                  Ref: 'AWS::AccountId'
+      Topics:
+        - Ref: BillingRecordsSnsTopic
+  S3Decompress:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: handlers/s3-decompress.handler
+      # FIXME: This needs to be dynamic
+      CodeUri: s3://serverlessops-opensource-deploy-prod/aws-adm/eb7a7c9b852a435fa5e3f8feaa1a5ef21047da27-12/deploy/aws-adm.zip
+      Description: >-
+        Decompress an S3 object and publish contents to an S3 bucket temporarily
+        for processing.
+      MemorySize: 256
+      Timeout: 300
+      Policies:
+        Statement:
+        - Effect: "Allow"
+          Action:
+            - "S3:GetObject"
+          Resource:
+            Fn::Join:
+              - - '/'
+              - - Ref: BillingReportBucket
+                - '*'
+        - Effect: "Allow"
+          Action:
+            - "S3:PutObject"
+          Resource:
+            Fn::Join:
+              - - '/'
+                - - Fn::GetAtt:
+                      - AdmStateS3Bucket
+                      - Arn
+                - '*'
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+          DECOMPRESS_S3_BUCKET_NAME:
+            Ref: AdmStateS3Bucket
+      Events:
+        Event1:
+          Type: S3
+          Properties:
+            Bucket:
+              Ref: BillingReportBucket
+            Events: 's3:ObjectCreated:Put'
+            Filter:
+              - suffix: .gz
+  LineItemPublish:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: handlers/line-item-publisher.handler
+      CodeUri: /Users/tom/Source/serverlessops/aws-adm/.serverless/aws-adm.zip
+      Description: Ingest an S3 object and publish line items.
+      MemorySize: 512
+      Timeout: 300
+      Policies:
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "s3:ListBucket"
+            Resource:
+              - Fn::GetAtt:
+                - AdmStateS3Bucket
+                - Arn
+          - Effect: "Allow"
+            Action:
+              - "S3:GetObject"
+              - "S3:PutObject"
+              - "S3:DeleteObject"
+            Resource:
+              Fn::Join:
+                - - '/'
+                - - Fn::GetAtt:
+                      - AdmStateS3Bucket
+                      - Arn
+                  - '*'
+          - Effect: "Allow"
+            Action:
+              - "SNS:Publish"
+            Resource:
+              - Ref: BillingRecordsSnsTopic
+          - Effect: "Allow"
+            Action:
+              - "Lambda:InvokeFunction"
+            Resource:
+              Ref: LineItemPublish
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+          AWS_SNS_TOPIC:
+            Ref: BillingRecordsSnsTopic
+          SCHEMA_CHANGE_HANDLING:
+            Ref: SchemaChangeHandling
+      Events:
+        Event1:
+          Type: S3
+          Properties:
+            Bucket:
+              Ref: AdmStateS3Bucket
+            Events: 's3:ObjectCreated:Put'
+            Filter:
+              - suffix: .csv
+  AdmStateS3Bucket:
+    Type: AWS::S3::Bucket
+
+
+Outputs:
+  BillingReportS3BucketName:
+    Description: S3 bucket where billing reports are delivered to.
+    Value:
+      Ref: S3BucketAwsadmprimebillingreportsAWSAccountId
+    Export:
+      Name: aws-adm-prime-BillingReportS3BucketName
+  AdmStateS3BucketName:
+    Description: S3 bucket where reports are decompressed and state is saved.
+    Value:
+      Ref: S3BucketAwsadmprimestateAWSAccountId
+    Export:
+      Name: aws-adm-prime-AdmStateS3BucketName
+  BillingRecordsSnsTopicArn:
+    Description: SNS topic ARN where billing records are published to.
+    Value:
+      Ref: BillingRecordsSnsTopic
+    Export:
+      Name: aws-adm-prime-BillingRecordsSnsTopicArn
+
+Parameters:
+  BillingReportBucket:
+     Type: String
+     Description: 'Name of S3 bucket AWS Cost and Usage reports are delivered to.'
+  SchemaChangeHandling:
+    Type: String
+    Description: 'Behavior by LineItemPublish function on report schema change.'
+    Default: CONTINUE
