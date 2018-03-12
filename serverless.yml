@@ -5,7 +5,6 @@ plugins:
   - serverless-iam-roles-per-function
   - serverless-pseudo-parameters
   - serverless-sam
-  - serverless-plugin-existing-s3
 
 custom:
   stage: "${opt:stage, env:SLS_STAGE, 'dev'}"
@@ -64,11 +63,10 @@ functions:
           - "Lambda:InvokeFunction"
         Resource: "arn:aws:lambda:${self:provider.region}:#{AWS::AccountId}:function:${self:service}-${self:provider.stage}-LineItemPublish"
     events:
-      - existingS3:
+      - s3:
           # NOTE: Need to use string here.
           bucket: '${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}'
-          events:
-            - "s3:ObjectCreated:Put"
+          event: "s3:ObjectCreated:Put"
           rules:
             - suffix: ".gz"
 
@@ -79,6 +77,7 @@ resources:
       Type: String
       Description: 'Behavior by LineItemPublish function on report schema change.'
       Default: '${self:custom.cf-parameters.schema_change_handling}'
+    # Not used by SLS but is by SAM template we generate and edit.
     BillingReportBucket:
       Type: String
       Description: 'Name of S3 bucket AWS Cost and Usage reports are delivered to.'
