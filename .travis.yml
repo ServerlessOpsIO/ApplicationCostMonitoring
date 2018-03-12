@@ -1,0 +1,103 @@
+env:
+  global:
+    - DIST_DIR="${PWD}/dist"
+    - PROJECT_NAME='aws-adm'
+    - ARTIFACT_ID="${TRAVIS_COMMIT}-${TRAVIS_BUILD_NUMBER}"
+    - S3_BUCKET="serverlessops-opensource-deploy-prod"
+    - S3_BUILD_PREFIX="${PROJECT_NAME}/${ARTIFACT_ID}/build"
+    - S3_DEPLOY_PREFIX="${PROJECT_NAME}/${ARTIFACT_ID}/deploy"
+      S3_DEPLOY_ARTIFACT="${S3_DEPLOY_PREFIX}/${PROJECT_NAME}.zip"
+    - AWS_SAM_TMPL_NAME="sam-template.yml"
+    - AWS_CFN_TMPL_NAME="cfn-template.yml"
+    - AWS_DEFAULT_REGION="us-east-1"
+    # AWS_ACCESS_KEY_ID
+    - secure: ""
+    # AWS_SECRET_ACCESS_KEY
+    - secure: ""
+
+stages:
+  - build
+  - artifact
+  - name: promote
+    if: branch = master
+
+jobs:
+  include:
+    - stage: build
+      sudo: required
+      services:
+        - docker
+      language: python
+      python: '3.6'
+      install:
+        - npm install -g serverless
+        - npm install
+      script: skip
+      before_deploy:
+        - sls package -v -s dev -r us-east-1 -p $DIST_DIR
+        - cp serverless.yml $DIST_DIR
+        # python-requirements directory
+        - rm -rf ${DIST_DIR}/requirements
+      deploy:
+        - provider: s3
+          skip_cleanup: true
+          bucket: "$S3_BUCKET"
+          upload_dir: "${PROJECT_NAME}/${ARTIFACT_ID}/build"
+          local_dir: "$DIST_DIR"
+          acl: private
+          on:
+            repo: "$TRAVIS_REPO_SLUG"
+          access_key_id: "$AWS_ACCESS_KEY_ID"
+          secret_access_key: "$AWS_SECRET_ACCESS_KEY"
+
+    - stage: artifact
+      language: python
+      python: '3.6'
+      install:
+        - npm install -g serverless
+        - npm install
+        - pip install awscli
+      script: skip
+      before_deploy:
+        # We reuse the artifacts from the build stage which we place into tmp.
+        - mkdir tmp
+        - aws s3 cp s3://${S3_BUCKET}/${S3_BUILD_PREFIX}/${PROJECT_NAME}.zip ./
+        - aws s3 cp s3://${S3_BUCKET}/${S3_BUILD_PREFIX}/serverless.yml ./tmp/
+        - unzip ${PROJECT_NAME}.zip -d tmp
+        - cd tmp
+        - mkdir $DIST_DIR
+        - cp ../${PROJECT_NAME}.zip $DIST_DIR
+        - sls sam export --output ${DIST_DIR}/${AWS_SAM_TMPL_NAME} --codeuri s3://${S3_BUCKET}/${S3_DEPLOY_ARTIFACT}
+        - aws cloudformation package --template-file ${DIST_DIR}/${AWS_SAM_TMPL_NAME} --output-template-file ${DIST_DIR}/${AWS_CFN_TMPL_NAME} --s3-bucket ${S3_BUCKET} --s3-prefix ${S3_DEPLOY_PREFIX}
+      deploy:
+        - provider: s3
+          skip_cleanup: true
+          bucket: "$S3_BUCKET"
+          upload_dir: "${PROJECT_NAME}/${ARTIFACT_ID}/deploy"
+          local_dir: "$DIST_DIR"
+          acl: public_read
+          on:
+            repo: "$TRAVIS_REPO_SLUG"
+          access_key_id: "$AWS_ACCESS_KEY_ID"
+          secret_access_key: "$AWS_SECRET_ACCESS_KEY"
+
+    - stage: promote
+      language: python
+      python: '3.6'
+      install:
+        - pip install awscli
+      script: skip
+
+      # FIXME: There's still an issue with browser caching an old link. May
+      # need to look at rewriting the contents of the file.
+      deploy:
+        - provider: script
+          script: aws s3api put-object --acl public-read --bucket $S3_BUCKET --key ${PROJECT_NAME}/CFN-DEPLOY-LATEST --website-redirect-location "https://console.aws.amazon.com/cloudformation/home?region=${AWS_DEFAULT_REGION}#/stacks/new?stackName=${PROJECT_NAME}&templateURL=https://${S3_BUCKET}.s3.amazonaws.com/${S3_DEPLOY_PREFIX}/${AWS_CFN_TMPL_NAME}" --cache-control "max-age=60"
+          on:
+            repo: "$TRAVIS_REPO_SLUG"
+        - provider: script
+          script: aws s3api put-object --acl public-read --bucket $S3_BUCKET --key ${PROJECT_NAME}/SAM-TEMPLATE-LATEST --website-redirect-location "https://${S3_BUCKET}.s3.amazonaws.com/${S3_DEPLOY_PREFIX}/${AWS_SAM_TMPL_NAME}" --cache-control "max-age=60"
+          on:
+            repo: "$TRAVIS_REPO_SLUG"
+
+
