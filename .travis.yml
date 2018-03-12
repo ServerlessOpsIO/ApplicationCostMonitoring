@@ -1,0 +1,103 @@
+env:
+  global:
+    - DIST_DIR="${PWD}/dist"
+    - PROJECT_NAME='aws-adm'
+    - ARTIFACT_ID="${TRAVIS_COMMIT}-${TRAVIS_BUILD_NUMBER}"
+    - S3_BUCKET="serverlessops-opensource-deploy-prod"
+    - S3_BUILD_PREFIX="${PROJECT_NAME}/${ARTIFACT_ID}/build"
+    - S3_DEPLOY_PREFIX="${PROJECT_NAME}/${ARTIFACT_ID}/deploy"
+      S3_DEPLOY_ARTIFACT="${S3_DEPLOY_PREFIX}/${PROJECT_NAME}.zip"
+    - AWS_SAM_TMPL_NAME="sam-template.yml"
+    - AWS_CFN_TMPL_NAME="cfn-template.yml"
+    - AWS_DEFAULT_REGION="us-east-1"
+    # AWS_ACCESS_KEY_ID
+    - secure: lXdZRC7LdCR9TOliONr8+AR9Tn6iYk6Sgv0nTOcTT8V/ogtDGgVpmSQkgCYFn3Q0u6tngxr57IvhDOJUU1pT908us8NQt+n9kUr/04DP7Pp4tyNdbJiaXQuX+GQF5Rc1LSAt61ahtNK10uWn7aD7KkXBnY9yqbGHvCHXkxAPj3D6Y+HfI7c2ej8YVkaY7K+9gMEsQfHs7UXiihSV3mFXbgjZ/xmHTtjX8UYn6l2yEl3B9HWi2Y9c0CcfhhNhDeV8vuwoUT53D7M0gnec88EHgCKe4vEALmKerb18OjFxRwZDdKFVTxWZu8LJjVPN+1QuvRyTDjCHlS6MHYVUzRsKh8N7FscvBjUYSfkUSIJ4YLwjYlsEs4r9LUlgnVFrd+5x+8IN/3ItFE+XILPEVOLfpCj/9zx+60drLDWcboX+MGalU0aZO4iPQoXES1/b4n/rP/o8qLOexo76VdJyZuS7oGXtrrE1TOxboKdAN2CIXGtepwG8EFso99s95NIctwpqX9wxV+hDVVmeNEvL2c5IYQ4cci0vRgbobcCcIv4qli4Z/ce/bGI9RWT+SBBMAxsKl6DHLDn8sC8neOUFTEVuK033tWbKYJb0CAA3c0uVGnNY/60zRk417pLNbHmSzmzVp52weASgVXw9uuFMyNDWHqSPmrU+hfqJK814U8roT58=
+    # AWS_SECRET_ACCESS_KEY
+    - secure: NFwZpizCRVR5hb+g7bAqQPV1XC6d379Z1SxgPNW22e/N3uCy8sawbLIB3KeVlj8dlcWMBWqrczHYbGY6abl5JbU7OsGh6dRbAkEU4KxomzvVfDXXih3FsR3e+5qlIZPxjXru0xBhLMlB3eVgqfOLElOft7yxq0buSQVekFtKiHBHMCeOYJZGi0ScCMP+KCecW90JP9bFY8u+rfpJRkq6HRP4f9j2eRPLOHLEM4SS8iV/ywP3BfOgjr8BHlZ8Le1h9bT9iB+XsMxRZC1rpC4bDidpqERyZSSelF6Z/b79FCdqWvmXPtk/jMw4z66lo1h3iLXar4u7JSDd7s4bN2yFmetIWTtuqmi8mMkpkbQXyS4hss6xppMnvZHtyWX4deR4O1cvcvYLhVctEg9ITAWjzZv56f5fJShHl8v3txwRu8kbH9OOE4Gxfyxb2z4iyjCeG73yxs3smi7w/KxIXWKYMK8+oFlFew/OuCXZOuHgVTCkZjEwT6yNZW7p+P/+jQC+Rj3jnnWrJZIPZ92Nu6vug/0dfSPb6nBETm1AO9Sn4ln40MR5fedTMY4GDV+5Fe6FLO3ATFankAsR1QxwvEXJSHq2nlGdksUdXVvxAqnRPeK7Y7/2GCbJ53fBZ9ssKI6M5I8pUOGlDOBwnvyjMBNAhn4YeUVtfdJqM0/FxfCUOnc=
+
+stages:
+  - build
+  - artifact
+  - name: promote
+    if: branch = master
+
+jobs:
+  include:
+    - stage: build
+      sudo: required
+      services:
+        - docker
+      language: python
+      python: '3.6'
+      install:
+        - npm install -g serverless
+        - npm install
+      script: skip
+      before_deploy:
+        - sls package -v -s dev -r us-east-1 -p $DIST_DIR
+        - cp serverless.yml $DIST_DIR
+        # python-requirements directory
+        - rm -rf ${DIST_DIR}/requirements
+      deploy:
+        - provider: s3
+          skip_cleanup: true
+          bucket: "$S3_BUCKET"
+          upload_dir: "${PROJECT_NAME}/${ARTIFACT_ID}/build"
+          local_dir: "$DIST_DIR"
+          acl: private
+          on:
+            repo: "$TRAVIS_REPO_SLUG"
+          access_key_id: "$AWS_ACCESS_KEY_ID"
+          secret_access_key: "$AWS_SECRET_ACCESS_KEY"
+
+    - stage: artifact
+      language: python
+      python: '3.6'
+      install:
+        - npm install -g serverless
+        - npm install
+        - pip install awscli
+      script: skip
+      before_deploy:
+        # We reuse the artifacts from the build stage which we place into tmp.
+        - mkdir tmp
+        - aws s3 cp s3://${S3_BUCKET}/${S3_BUILD_PREFIX}/${PROJECT_NAME}.zip ./
+        - aws s3 cp s3://${S3_BUCKET}/${S3_BUILD_PREFIX}/serverless.yml ./tmp/
+        - unzip ${PROJECT_NAME}.zip -d tmp
+        - cd tmp
+        - mkdir $DIST_DIR
+        - cp ../${PROJECT_NAME}.zip $DIST_DIR
+        - sls sam export --output ${DIST_DIR}/${AWS_SAM_TMPL_NAME} --codeuri s3://${S3_BUCKET}/${S3_DEPLOY_ARTIFACT}
+        - aws cloudformation package --template-file ${DIST_DIR}/${AWS_SAM_TMPL_NAME} --output-template-file ${DIST_DIR}/${AWS_CFN_TMPL_NAME} --s3-bucket ${S3_BUCKET} --s3-prefix ${S3_DEPLOY_PREFIX}
+      deploy:
+        - provider: s3
+          skip_cleanup: true
+          bucket: "$S3_BUCKET"
+          upload_dir: "${PROJECT_NAME}/${ARTIFACT_ID}/deploy"
+          local_dir: "$DIST_DIR"
+          acl: public_read
+          on:
+            repo: "$TRAVIS_REPO_SLUG"
+          access_key_id: "$AWS_ACCESS_KEY_ID"
+          secret_access_key: "$AWS_SECRET_ACCESS_KEY"
+
+    - stage: promote
+      language: python
+      python: '3.6'
+      install:
+        - pip install awscli
+      script: skip
+
+      # FIXME: There's still an issue with browser caching an old link. May
+      # need to look at rewriting the contents of the file.
+      deploy:
+        - provider: script
+          script: aws s3api put-object --acl public-read --bucket $S3_BUCKET --key ${PROJECT_NAME}/CFN-DEPLOY-LATEST --website-redirect-location "https://console.aws.amazon.com/cloudformation/home?region=${AWS_DEFAULT_REGION}#/stacks/new?stackName=${PROJECT_NAME}&templateURL=https://${S3_BUCKET}.s3.amazonaws.com/${S3_DEPLOY_PREFIX}/${AWS_CFN_TMPL_NAME}" --cache-control "max-age=60"
+          on:
+            repo: "$TRAVIS_REPO_SLUG"
+        - provider: script
+          script: aws s3api put-object --acl public-read --bucket $S3_BUCKET --key ${PROJECT_NAME}/SAM-TEMPLATE-LATEST --website-redirect-location "https://${S3_BUCKET}.s3.amazonaws.com/${S3_DEPLOY_PREFIX}/${AWS_SAM_TMPL_NAME}" --cache-control "max-age=60"
+          on:
+            repo: "$TRAVIS_REPO_SLUG"
+
+

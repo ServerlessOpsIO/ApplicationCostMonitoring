@@ -16,6 +16,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+**/.mypy_cache/
 
 # Serverless directories
 .serverless
