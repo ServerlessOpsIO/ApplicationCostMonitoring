@@ -65,8 +65,8 @@ functions:
         Resource: "arn:aws:lambda:${self:provider.region}:#{AWS::AccountId}:function:${self:service}-${self:provider.stage}-LineItemPublish"
     events:
       - existingS3:
-          bucket:
-            Ref: BillingReportBucket
+          # NOTE: Need to use string here.
+          bucket: '${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}'
           events:
             - "s3:ObjectCreated:Put"
           rules:
