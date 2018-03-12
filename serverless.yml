@@ -38,7 +38,7 @@ functions:
     environment:
       LOG_LEVEL: ${self:custom.log_level}
       DECOMPRESS_S3_BUCKET_NAME:
-        Ref: S3BucketAwsadmprimedecompressAWSAccountId
+        Ref: 'S3BucketAwsadm${self:provider.stage}stateAWSAccountId'
     iamRoleStatements:
       - Effect: "Allow"
         Action:
@@ -47,7 +47,7 @@ functions:
       - Effect: "Allow"
         Action:
           - "S3:PutObject"
-        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-decompress-#{AWS::AccountId}/*"
+        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-state-#{AWS::AccountId}/*"
     events:
       - s3:
           bucket: "${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}"   # S3BucketAWSAccountIdbillingreportsprime
@@ -70,13 +70,13 @@ functions:
       - Effect: "Allow"
         Action:
           - "s3:ListBucket"
-        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-decompress-#{AWS::AccountId}"
+        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-state-#{AWS::AccountId}"
       - Effect: "Allow"
         Action:
           - "S3:GetObject"
           - "S3:PutObject"
           - "S3:DeleteObject"
-        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-decompress-#{AWS::AccountId}/*"
+        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-state-#{AWS::AccountId}/*"
       - Effect: "Allow"
         Action:
           - "SNS:Publish"
@@ -88,7 +88,7 @@ functions:
         Resource: "arn:aws:lambda:${self:provider.region}:#{AWS::AccountId}:function:${self:service}-${self:provider.stage}-LineItemPublish"
     events:
       - s3:
-          bucket: "${self:service}-${self:provider.stage}-decompress-#{AWS::AccountId}"       # S3BucketAWSAccountIddecompressprime
+          bucket: "${self:service}-${self:provider.stage}-state-#{AWS::AccountId}"       # S3BucketAWSAccountIdstateprime
           event: "s3:ObjectCreated:Put"
           rules:
             - suffix: ".csv"
@@ -191,7 +191,7 @@ resources:
     AdmStateS3BucketName:
       Description: "S3 bucket where reports are decompressed and state is saved."
       Value:
-        Ref: 'S3BucketAwsadm${self:provider.stage}decompressAWSAccountId'
+        Ref: 'S3BucketAwsadm${self:provider.stage}stateAWSAccountId'
       Export:
         Name: "${self:service}-${self:provider.stage}-AdmStateS3BucketName"
 
