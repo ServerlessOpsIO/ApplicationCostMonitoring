@@ -43,7 +43,7 @@ Resources:
     Properties:
       Handler: handlers/s3-decompress.handler
       # FIXME: This needs to be dynamic
-      CodeUri: s3://serverlessops-opensource-deploy-prod/aws-adm/eb7a7c9b852a435fa5e3f8feaa1a5ef21047da27-12/deploy/aws-adm.zip
+      CodeUri: s3://%%S3_BUCKET%%/%%S3_DEPLOY_ARTIFACT%%
       Description: >-
         Decompress an S3 object and publish contents to an S3 bucket temporarily
         for processing.
@@ -87,7 +87,7 @@ Resources:
     Type: 'AWS::Serverless::Function'
     Properties:
       Handler: handlers/line-item-publisher.handler
-      CodeUri: /Users/tom/Source/serverlessops/aws-adm/.serverless/aws-adm.zip
+      CodeUri: s3://%%S3_BUCKET%%/%%S3_DEPLOY_ARTIFACT%%
       Description: Ingest an S3 object and publish line items.
       MemorySize: 512
       Timeout: 300
