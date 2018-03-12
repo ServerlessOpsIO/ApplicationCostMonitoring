@@ -51,24 +51,12 @@ Resources:
       Timeout: 300
       Policies:
         Statement:
-        - Effect: "Allow"
-          Action:
-            - "S3:GetObject"
-          Resource:
-            Fn::Join:
-              - - '/'
-              - - Ref: BillingReportBucket
-                - '*'
-        - Effect: "Allow"
-          Action:
-            - "S3:PutObject"
-          Resource:
-            Fn::Join:
-              - - '/'
-                - - Fn::GetAtt:
-                      - AdmStateS3Bucket
-                      - Arn
-                - '*'
+          - S3CrudPolicy:
+              bucketName:
+                Ref: BillingReportBucket
+          - S3CrudPolicy:
+              bucketName:
+                Ref: AdmStateS3Bucket
       Environment:
         Variables:
           LOG_LEVEL: INFO
@@ -93,35 +81,16 @@ Resources:
       Timeout: 300
       Policies:
         Statement:
-          - Effect: "Allow"
-            Action:
-              - "s3:ListBucket"
-            Resource:
-              - Fn::GetAtt:
-                - AdmStateS3Bucket
-                - Arn
-          - Effect: "Allow"
-            Action:
-              - "S3:GetObject"
-              - "S3:PutObject"
-              - "S3:DeleteObject"
-            Resource:
-              Fn::Join:
-                - - '/'
-                - - Fn::GetAtt:
-                      - AdmStateS3Bucket
-                      - Arn
-                  - '*'
-          - Effect: "Allow"
-            Action:
-              - "SNS:Publish"
-            Resource:
-              - Ref: BillingRecordsSnsTopic
-          - Effect: "Allow"
-            Action:
-              - "Lambda:InvokeFunction"
-            Resource:
-              Ref: LineItemPublish
+          # FIXME: We need S3 delete
+          - S3CrudPolicy:
+              bucketName:
+                Ref: AdmStateS3Bucket
+          - SNSPublishMessagePolicy:
+              topicName:
+                Ref: BillingRecordsSnsTopic
+          - LambdaInvokePolicy:
+              functionName:
+                Ref: LineItemPublish
       Environment:
         Variables:
           LOG_LEVEL: INFO
