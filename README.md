@@ -1,6 +1,6 @@
 # AWS Application Dollar Monitoring
 [![serverless](http://public.serverless.com/badges/v3.svg)](http://www.serverless.com)
-[![Build Status](https://travis-ci.org/ServerlessOpsIO/aws-adm.svg?branch=master)](https://travis-ci.org/ServerlessOpsIO/aws-adm)
+[![Build Status](https://travis-ci.org/ServerlessOpsIO/aws-application-dollar-monitoring.svg?branch=master)](https://travis-ci.org/ServerlessOpsIO/aws-application-dollar-monitoring)
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://opensource.org/licenses/BSD-2-Clause)
 
 Application Dollar Monitoring provides granular AWS spend tracking.
