@@ -33,7 +33,7 @@ provider:
   stage: ${self:custom.stage}
 
 functions:
-  LineItemPublish:
+  Publish:
     handler: handlers/line-item-publisher.handler
     description: "Ingest an S3 object and publish line items."
     runtime: python3.6
@@ -63,7 +63,7 @@ functions:
       - Effect: "Allow"
         Action:
           - "Lambda:InvokeFunction"
-        Resource: "arn:aws:lambda:${self:provider.region}:#{AWS::AccountId}:function:${self:service}-${self:provider.stage}-LineItemPublish"
+        Resource: "arn:aws:lambda:${self:provider.region}:#{AWS::AccountId}:function:${self:service}-${self:provider.stage}-Publish"
     events:
       - s3:
           # NOTE: Need to use string here.
@@ -83,7 +83,7 @@ resources:
   Parameters:
     SchemaChangeHandling:
       Type: String
-      Description: 'Behavior by LineItemPublish function on report schema change.'
+      Description: 'Behavior by Publish function on report schema change.'
       Default: '${self:custom.cf-parameters.schema_change_handling}'
 
   Resources:
