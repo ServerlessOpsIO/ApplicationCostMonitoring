@@ -7,6 +7,7 @@ Resources:
   LineItemPublish:
     Type: 'AWS::Serverless::Function'
     Properties:
+      Runtime: python3.6
       Handler: handlers/line-item-publisher.handler
       CodeUri: s3://%%S3_BUCKET%%/%%S3_DEPLOY_ARTIFACT%%
       Description: Ingest an S3 object and publish line items.
@@ -15,13 +16,13 @@ Resources:
       Policies:
         # FIXME: We need S3 delete
         - S3CrudPolicy:
-            bucketName:
+            BucketName:
               Ref: AdmStateS3Bucket
         - SNSPublishMessagePolicy:
-            topicName:
+            TopicName:
               Ref: BillingRecordsSnsTopic
         - LambdaInvokePolicy:
-            functionName:
+            FunctionName:
               Ref: LineItemPublish
       Environment:
         Variables:
