@@ -22,7 +22,9 @@ Resources:
               Ref: BillingReportBucketName
         - SNSPublishMessagePolicy:
             TopicName:
-              Ref: BillingRecordsSnsTopic
+              Fn::GetAtt:
+                - BillingRecordsSnsTopic
+                - Arn
         - LambdaInvokePolicy:
             # NOTE: We can't Ref Stack name when publishing to AppRepo
             FunctionName: 'aws-serverless-repository-ApplicationCostMonitoring-Publish'
