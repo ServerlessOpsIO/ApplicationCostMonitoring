@@ -1,6 +1,6 @@
 # AWS Application Cost Monitoring
 [![serverless](http://public.serverless.com/badges/v3.svg)](http://www.serverless.com)
-[![Build Status](https://travis-ci.org/ServerlessOpsIO/aws-application-dollar-monitoring.svg?branch=master)](https://travis-ci.org/ServerlessOpsIO/aws-application-dollar-monitoring)
+[![Build Status](https://travis-ci.org/ServerlessOpsIO/ApplicationCostMonitoring.svg?branch=master)](https://travis-ci.org/ServerlessOpsIO/ApplicationCostMonitoring)
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://opensource.org/licenses/BSD-2-Clause)
 
 Application Cost Monitoring provides granular AWS spend tracking.

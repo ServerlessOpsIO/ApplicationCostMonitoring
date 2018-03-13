@@ -1,7 +1,7 @@
 env:
   global:
     - DIST_DIR="${PWD}/dist"
-    - PROJECT_NAME='aws-adm'
+    - PROJECT_NAME=$(basename ${PWD})
     - ARTIFACT_ID="${TRAVIS_COMMIT}-${TRAVIS_BUILD_NUMBER}"
     - S3_BUCKET="serverlessops-opensource-deploy-prod"
     - S3_BUILD_PREFIX="${PROJECT_NAME}/${ARTIFACT_ID}/build"
