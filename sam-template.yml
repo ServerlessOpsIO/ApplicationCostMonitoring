@@ -8,7 +8,7 @@ Resources:
     Type: 'AWS::Serverless::Function'
     Properties:
       # NOTE: Necessary to handle LambdaInvokePolicy for self.
-      FunctionName: 'awws-adm-LineItemPublish'
+      FunctionName: 'aws-serverless-repository-ApplicationDollarMonitoring-LineItemPublish'
       Runtime: python3.6
       Handler: handlers/line-item-publisher.handler
       CodeUri: s3://%%S3_BUCKET%%/%%S3_DEPLOY_ARTIFACT%%
@@ -25,7 +25,7 @@ Resources:
               Ref: BillingRecordsSnsTopic
         - LambdaInvokePolicy:
             # NOTE: We can't Ref Stack name when publishing to AppRepo
-            FunctionName: 'aws-adm-LineItemPublish'
+            FunctionName: 'aws-serverless-repository-ApplicationDollarMonitoring-LineItemPublish'
       Environment:
         Variables:
           LOG_LEVEL: INFO

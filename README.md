@@ -9,10 +9,15 @@ Using the AWS Cost and Usage report this system will parse the report and feed t
 
 * [aws-application-dollar-monitoring-s3-writer](https://github.com/ServerlessOpsIO/aws-application-dollar-monitoring-s3-writer)
 
-![ystem Architecture](/AWS%20ADM%20Diagram.png?raw=true "System Architecture")
+![System Architecture](/AWS%20ADM%20Diagram.png?raw=true "System Architecture")
 
 ## Deployment
-Read through the entire documentation first.  You need to deploy the application and then create the billing report.  However, there is information in setting up the billing report that may influence your deployment.
+Read through the entire documentation first.  There is information in setting up the billing report that may influence your deployment.
+
+You will perform the folowing actions:
+* Deploy the application
+* Create the billing report
+* Setup bucket policy (AWS Application Repository only)
 
 ### Application Deployment
 This service supports both [Serverless Framework](https://serverless.com/) and [AWS Serverless Application Repository](https://aws.amazon.com/serverless/serverlessrepo/).
@@ -27,9 +32,9 @@ $ serverless deploy -v
 ```
 
 #### AWS Serverless Application Repository
-This application is available in the AWS Serverless Application Repository
+This application is available in the AWS Serverless Application Repository.  Follow the directions there if you wish to deploy from AppRepo.
 
-* .......
+* https://serverlessrepo.aws.amazon.com/#/applications/arn:aws:serverlessrepo:us-east-1:641494176294:applications~ApplicationDollarMonitoring
 
 ### Outputs
 * _aws-adm-${stage}-BillingReportS3BucketName_: Name of S3 Bucket where billing reports will be delivered
