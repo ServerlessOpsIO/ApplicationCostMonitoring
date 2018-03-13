@@ -57,10 +57,8 @@ jobs:
         - pip install awscli
       script:
         # We reuse the artifacts from the build stage which we place into tmp.
-        - mkdir tmp
-        - aws s3 cp s3://${S3_BUCKET}/${S3_BUILD_PREFIX}/${PROJECT_NAME}.zip ./
         - mkdir $DIST_DIR
-        - cp ${PROJECT_NAME}.zip $DIST_DIR
+        - aws s3 cp s3://${S3_BUCKET}/${S3_BUILD_PREFIX}/${PROJECT_NAME}.zip ${DIST_DIR}/
         - cp ${AWS_SAM_TMPL_NAME} ${DIST_DIR}
         - sed -i'' -e "s,%%S3_BUCKET%%,${S3_BUCKET}," -e "s,%%S3_DEPLOY_ARTIFACT%%,${S3_DEPLOY_ARTIFACT}," ${DIST_DIR}/${AWS_SAM_TMPL_NAME}
         - aws cloudformation package --template-file ${DIST_DIR}/${AWS_SAM_TMPL_NAME} --output-template-file ${DIST_DIR}/${AWS_CFN_TMPL_NAME} --s3-bucket ${S3_BUCKET} --s3-prefix ${S3_DEPLOY_PREFIX}
