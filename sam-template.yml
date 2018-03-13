@@ -13,17 +13,16 @@ Resources:
       MemorySize: 512
       Timeout: 300
       Policies:
-        Statement:
-          # FIXME: We need S3 delete
-          - S3CrudPolicy:
-              bucketName:
-                Ref: AdmStateS3Bucket
-          - SNSPublishMessagePolicy:
-              topicName:
-                Ref: BillingRecordsSnsTopic
-          - LambdaInvokePolicy:
-              functionName:
-                Ref: LineItemPublish
+        # FIXME: We need S3 delete
+        - S3CrudPolicy:
+            bucketName:
+              Ref: AdmStateS3Bucket
+        - SNSPublishMessagePolicy:
+            topicName:
+              Ref: BillingRecordsSnsTopic
+        - LambdaInvokePolicy:
+            functionName:
+              Ref: LineItemPublish
       Environment:
         Variables:
           LOG_LEVEL: INFO
