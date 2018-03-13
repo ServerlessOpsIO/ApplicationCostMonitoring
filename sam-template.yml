@@ -17,7 +17,7 @@ Resources:
         # FIXME: We need S3 delete
         - S3CrudPolicy:
             BucketName:
-              Ref: AdmStateS3Bucket
+              Ref: BillingReportS3Bucket
         - SNSPublishMessagePolicy:
             TopicName:
               Ref: BillingRecordsSnsTopic
@@ -35,7 +35,8 @@ Resources:
         Event1:
           Type: S3
           Properties:
-            Bucket: 'aws-adm-prime-billing-reports-#{AWS::AccountId}'
+            Bucket:
+              Ref: BillingReportBucketName
             Events: 's3:ObjectCreated:Put'
             Filter:
               S3Key:
@@ -45,26 +46,37 @@ Resources:
         Event2:
           Type: S3
           Properties:
-            Bucket: 'aws-adm-prime-billing-reports-#{AWS::AccountId}'
+            Bucket:
+              Ref: BillingReportBucketName
             Events: 's3:ObjectCreated:Put'
             Filter:
               S3Key:
                 Rules:
                   - Name: suffix
                     Value: .zip
+  BillingReportS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName:
+        Ref: BillingReportBucketName
 Outputs:
+  BillingReportS3BucketName:
+    Description: Name of S3 Bucket for billing reports.
+    Value:
+      Ref: BillingReportS3Bucket
+    Export:
+      Name: aws-adm-BillingReportBucketName
   BillingRecordsSnsTopicArn:
     Description: SNS topic ARN where billing records are published to.
     Value:
       Ref: BillingRecordsSnsTopic
     Export:
-      Name: aws-adm-prime-BillingRecordsSnsTopicArn
+      Name: aws-adm-BillingRecordsSnsTopicArn
 Parameters:
   SchemaChangeHandling:
     Type: String
     Description: Behavior by LineItemPublish function on report schema change.
     Default: CONTINUE
-  BillingReportBucket:
+  BillingReportBucketName:
     Type: String
     Description: Name of S3 bucket AWS Cost and Usage reports are delivered to.
-    Default: ''
