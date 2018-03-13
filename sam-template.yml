@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
-Description: 'SAM template for Serverless framework service: Application Dollar Monitoring'
+Description: 'SAM template for Serverless framework service: Application Cost Monitoring'
 Resources:
   BillingRecordsSnsTopic:
     Type: 'AWS::SNS::Topic'
@@ -8,7 +8,7 @@ Resources:
     Type: 'AWS::Serverless::Function'
     Properties:
       # NOTE: Necessary to handle LambdaInvokePolicy for self.
-      FunctionName: 'aws-serverless-repository-ApplicationDollarMonitoring-Publish'
+      FunctionName: 'aws-serverless-repository-ApplicationCostMonitoring-Publish'
       Runtime: python3.6
       Handler: handlers/line-item-publisher.handler
       CodeUri: s3://%%S3_BUCKET%%/%%S3_DEPLOY_ARTIFACT%%
@@ -25,7 +25,7 @@ Resources:
               Ref: BillingRecordsSnsTopic
         - LambdaInvokePolicy:
             # NOTE: We can't Ref Stack name when publishing to AppRepo
-            FunctionName: 'aws-serverless-repository-ApplicationDollarMonitoring-Publish'
+            FunctionName: 'aws-serverless-repository-ApplicationCostMonitoring-Publish'
       Environment:
         Variables:
           LOG_LEVEL: INFO
@@ -67,13 +67,13 @@ Outputs:
     Value:
       Ref: BillingReportS3Bucket
     Export:
-      Name: aws-serverless-repository-ApplicationDollarMonitoring-BillingReportS3BucketName
+      Name: aws-serverless-repository-ApplicationCostMonitoring-BillingReportS3BucketName
   BillingRecordsSnsTopicArn:
     Description: SNS topic ARN where billing records are published to.
     Value:
       Ref: BillingRecordsSnsTopic
     Export:
-      Name: aws-serverless-repository-ApplicationDollarMonitoring-BillingRecordsSnsTopicArn
+      Name: aws-serverless-repository-ApplicationCostMonitoring-BillingRecordsSnsTopicArn
 Parameters:
   SchemaChangeHandling:
     Type: String

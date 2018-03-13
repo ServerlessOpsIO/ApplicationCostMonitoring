@@ -1,4 +1,4 @@
-service: aws-adm
+service: ApplicationCostMonitoring
 
 plugins:
   - serverless-python-requirements
@@ -10,8 +10,7 @@ custom:
   stage: "${opt:stage, env:SLS_STAGE, 'dev'}"
   profile: "${opt:aws-profile, env:AWS_PROFILE, env:AWS_DEFAULT_PROFILE, 'default'}"
   log_level: "${env:LOG_LEVEL, 'INFO'}"
-  database_s3_prefix: 'aws-adm'
-  database_table_name: 'line_items'
+  billing_bucket_name: 'applicationcostmonitoring-${self:provider.stage}-billing-reports-#{AWS::AccountId}'
 
   cf-parameters:
     # Changing tags on billing reports will alter the report schema which can:
@@ -49,12 +48,12 @@ functions:
       - Effect: "Allow"
         Action:
           - "s3:ListBucket"
-        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}"
+        Resource: "arn:aws:s3:::${self:custom.billing_bucket_name}"
       - Effect: "Allow"
         Action:
           - "S3:GetObject"
           - "S3:PutObject"
-        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}/*"
+        Resource: "arn:aws:s3:::${self:custom.billing_bucket_name}/*"
       - Effect: "Allow"
         Action:
           - "SNS:Publish"
@@ -67,13 +66,13 @@ functions:
     events:
       - s3:
           # NOTE: Need to use string here.
-          bucket: '${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}'
+          bucket: '${self:custom.billing_bucket_name}'
           event: "s3:ObjectCreated:Put"
           rules:
             - suffix: ".gz"
       - s3:
           # NOTE: Need to use string here.
-          bucket: '${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}'
+          bucket: '${self:custom.billing_bucket_name}'
           event: "s3:ObjectCreated:Put"
           rules:
             - suffix: ".zip"
@@ -140,7 +139,7 @@ resources:
       Type: "AWS::S3::BucketPolicy"
       Properties:
         Bucket:
-          Ref: S3BucketAwsadmprimebillingreportsAWSAccountId
+          Ref: "S3BucketApplicationcostmonitoring${self:provider.stage}billingreportsAWSAccountId"
         PolicyDocument: {
           "Version": "2008-10-17",
           "Id": "Policy1335892530063",
@@ -155,7 +154,7 @@ resources:
                 "s3:GetBucketAcl",
                 "s3:GetBucketPolicy"
               ],
-              "Resource": { "Fn::GetAtt": ["S3BucketAwsadmprimebillingreportsAWSAccountId", "Arn"] }
+              "Resource": { "Fn::GetAtt": ["S3BucketApplicationcostmonitoring${self:provider.stage}billingreportsAWSAccountId", "Arn"] }
             },
             {
               "Sid": "Stmt1335892526596",
@@ -166,7 +165,7 @@ resources:
               "Action": [
                 "s3:PutObject"
               ],
-              "Resource": { "Fn::Join": ["/", [{ "Fn::GetAtt": ["S3BucketAwsadmprimebillingreportsAWSAccountId", "Arn"] }, "*"]] }
+              "Resource": { "Fn::Join": ["/", [{ "Fn::GetAtt": ["S3BucketApplicationcostmonitoring${self:provider.stage}billingreportsAWSAccountId", "Arn"] }, "*"]] }
             }
           ]
         }
@@ -176,7 +175,7 @@ resources:
     BillingReportS3BucketName:
       Description: "S3 bucket where billing reports are delivered to."
       Value:
-        Ref: 'S3BucketAwsadm${self:provider.stage}billingreportsAWSAccountId'
+        Ref: "S3BucketApplicationcostmonitoring${self:provider.stage}billingreportsAWSAccountId"
       Export:
         Name: "${self:service}-${self:provider.stage}-BillingReportS3BucketName"
     BillingRecordsSnsTopicArn:
