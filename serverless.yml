@@ -26,7 +26,6 @@ custom:
     # - CONTINUE: Just continue processing.
     # - RECONCILE: Reprocess the entire report.
     schema_change_handling: "${env:SCHEMA_CHANGE_HANDLING, 'CONTINUE'}"
-    billing_report_bucket: "${env:BILLING_REPORT_BUCKET, ''}"
 
 provider:
   name: aws
@@ -86,11 +85,6 @@ resources:
       Type: String
       Description: 'Behavior by LineItemPublish function on report schema change.'
       Default: '${self:custom.cf-parameters.schema_change_handling}'
-    # Not used by SLS but is by SAM template we generate and edit.
-    BillingReportBucket:
-      Type: String
-      Description: 'Name of S3 bucket AWS Cost and Usage reports are delivered to.'
-      Default: '${self:custom.cf-parameters.billing_report_bucket}'
 
   Resources:
     BillingRecordsSnsTopic:
@@ -142,7 +136,49 @@ resources:
         Topics:
           - Ref: BillingRecordsSnsTopic
 
+    BillingS3BucketPolicy:
+      Type: "AWS::S3::BucketPolicy"
+      Properties:
+        Bucket:
+          Ref: S3BucketAwsadmprimebillingreportsAWSAccountId
+        PolicyDocument: {
+          "Version": "2008-10-17",
+          "Id": "Policy1335892530063",
+          "Statement": [
+            {
+              "Sid": "Stmt1335892150622",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "arn:aws:iam::386209384616:root"
+              },
+              "Action": [
+                "s3:GetBucketAcl",
+                "s3:GetBucketPolicy"
+              ],
+              "Resource": { "Fn::GetAtt": ["S3BucketAwsadmprimebillingreportsAWSAccountId", "Arn"] }
+            },
+            {
+              "Sid": "Stmt1335892526596",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "arn:aws:iam::386209384616:root"
+              },
+              "Action": [
+                "s3:PutObject"
+              ],
+              "Resource": { "Fn::Join": ["/", [{ "Fn::GetAtt": ["S3BucketAwsadmprimebillingreportsAWSAccountId", "Arn"] }, "*"]] }
+            }
+          ]
+        }
+
+
   Outputs:
+    BillingReportS3BucketName:
+      Description: "S3 bucket where billing reports are delivered to."
+      Value:
+        Ref: 'S3BucketAwsadm${self:provider.stage}billingreportsAWSAccountId'
+      Export:
+        Name: "${self:service}-${self:provider.stage}-BillingReportS3BucketName"
     BillingRecordsSnsTopicArn:
       Description: "SNS topic ARN where billing records are published to."
       Value:
