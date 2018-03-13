@@ -4,11 +4,11 @@ Description: 'SAM template for Serverless framework service: Application Dollar 
 Resources:
   BillingRecordsSnsTopic:
     Type: 'AWS::SNS::Topic'
-  LineItemPublish:
+  Publish:
     Type: 'AWS::Serverless::Function'
     Properties:
       # NOTE: Necessary to handle LambdaInvokePolicy for self.
-      FunctionName: 'aws-serverless-repository-ApplicationDollarMonitoring-LineItemPublish'
+      FunctionName: 'aws-serverless-repository-ApplicationDollarMonitoring-Publish'
       Runtime: python3.6
       Handler: handlers/line-item-publisher.handler
       CodeUri: s3://%%S3_BUCKET%%/%%S3_DEPLOY_ARTIFACT%%
@@ -25,7 +25,7 @@ Resources:
               Ref: BillingRecordsSnsTopic
         - LambdaInvokePolicy:
             # NOTE: We can't Ref Stack name when publishing to AppRepo
-            FunctionName: 'aws-serverless-repository-ApplicationDollarMonitoring-LineItemPublish'
+            FunctionName: 'aws-serverless-repository-ApplicationDollarMonitoring-Publish'
       Environment:
         Variables:
           LOG_LEVEL: INFO
@@ -77,7 +77,7 @@ Outputs:
 Parameters:
   SchemaChangeHandling:
     Type: String
-    Description: Behavior by LineItemPublish function on report schema change.
+    Description: Behavior by Publish function on report schema change.
     Default: CONTINUE
   BillingReportBucketName:
     Type: String
