@@ -7,6 +7,8 @@ Resources:
   LineItemPublish:
     Type: 'AWS::Serverless::Function'
     Properties:
+      # NOTE: Necessary to handle LambdaInvokePolicy for self.
+      FunctionName: 'awws-adm-LineItemPublish'
       Runtime: python3.6
       Handler: handlers/line-item-publisher.handler
       CodeUri: s3://%%S3_BUCKET%%/%%S3_DEPLOY_ARTIFACT%%
@@ -14,16 +16,16 @@ Resources:
       MemorySize: 512
       Timeout: 300
       Policies:
-        # FIXME: We need S3 delete
         - S3CrudPolicy:
+            # NOTE: Need to ref the parameter to avoid a circular dependency.
             BucketName:
-              Ref: BillingReportS3Bucket
+              Ref: BillingReportBucketName
         - SNSPublishMessagePolicy:
             TopicName:
               Ref: BillingRecordsSnsTopic
         - LambdaInvokePolicy:
-            FunctionName:
-              Ref: LineItemPublish
+            # NOTE: We can't Ref Stack name when publishing to AppRepo
+            FunctionName: 'aws-adm-LineItemPublish'
       Environment:
         Variables:
           LOG_LEVEL: INFO
@@ -36,7 +38,7 @@ Resources:
           Type: S3
           Properties:
             Bucket:
-              Ref: BillingReportBucketName
+              Ref: BillingReportS3Bucket
             Events: 's3:ObjectCreated:Put'
             Filter:
               S3Key:
@@ -47,7 +49,7 @@ Resources:
           Type: S3
           Properties:
             Bucket:
-              Ref: BillingReportBucketName
+              Ref: BillingReportS3Bucket
             Events: 's3:ObjectCreated:Put'
             Filter:
               S3Key:
