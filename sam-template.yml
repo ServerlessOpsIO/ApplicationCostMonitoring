@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: 'SAM template for Serverless framework service: Application Dollar Monitoring'
+Resources:
+  BillingRecordsSnsTopic:
+    Type: 'AWS::SNS::Topic'
+  LineItemPublish:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      # NOTE: Necessary to handle LambdaInvokePolicy for self.
+      FunctionName: 'aws-serverless-repository-ApplicationDollarMonitoring-LineItemPublish'
+      Runtime: python3.6
+      Handler: handlers/line-item-publisher.handler
+      CodeUri: s3://%%S3_BUCKET%%/%%S3_DEPLOY_ARTIFACT%%
+      Description: Ingest an S3 object and publish line items.
+      MemorySize: 512
+      Timeout: 300
+      Policies:
+        - S3CrudPolicy:
+            # NOTE: Need to ref the parameter to avoid a circular dependency.
+            BucketName:
+              Ref: BillingReportBucketName
+        - SNSPublishMessagePolicy:
+            TopicName:
+              Ref: BillingRecordsSnsTopic
+        - LambdaInvokePolicy:
+            # NOTE: We can't Ref Stack name when publishing to AppRepo
+            FunctionName: 'aws-serverless-repository-ApplicationDollarMonitoring-LineItemPublish'
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+          AWS_SNS_TOPIC:
+            Ref: BillingRecordsSnsTopic
+          SCHEMA_CHANGE_HANDLING:
+            Ref: SchemaChangeHandling
+      Events:
+        Event1:
+          Type: S3
+          Properties:
+            Bucket:
+              Ref: BillingReportS3Bucket
+            Events: 's3:ObjectCreated:Put'
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .gz
+        Event2:
+          Type: S3
+          Properties:
+            Bucket:
+              Ref: BillingReportS3Bucket
+            Events: 's3:ObjectCreated:Put'
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .zip
+  BillingReportS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName:
+        Ref: BillingReportBucketName
+Outputs:
+  BillingReportS3BucketName:
+    Description: Name of S3 Bucket for billing reports.
+    Value:
+      Ref: BillingReportS3Bucket
+    Export:
+      Name: aws-serverless-repository-ApplicationDollarMonitoring-BillingReportS3BucketName
+  BillingRecordsSnsTopicArn:
+    Description: SNS topic ARN where billing records are published to.
+    Value:
+      Ref: BillingRecordsSnsTopic
+    Export:
+      Name: aws-serverless-repository-ApplicationDollarMonitoring-BillingRecordsSnsTopicArn
+Parameters:
+  SchemaChangeHandling:
+    Type: String
+    Description: Behavior by LineItemPublish function on report schema change.
+    Default: CONTINUE
+  BillingReportBucketName:
+    Type: String
+    Description: Name of S3 bucket AWS Cost and Usage reports are delivered to.

@@ -6,7 +6,7 @@ env:
     - S3_BUCKET="serverlessops-opensource-deploy-prod"
     - S3_BUILD_PREFIX="${PROJECT_NAME}/${ARTIFACT_ID}/build"
     - S3_DEPLOY_PREFIX="${PROJECT_NAME}/${ARTIFACT_ID}/deploy"
-      S3_DEPLOY_ARTIFACT="${S3_DEPLOY_PREFIX}/${PROJECT_NAME}.zip"
+    - S3_DEPLOY_ARTIFACT="${S3_DEPLOY_PREFIX}/${PROJECT_NAME}.zip"
     - AWS_SAM_TMPL_NAME="sam-template.yml"
     - AWS_CFN_TMPL_NAME="cfn-template.yml"
     - AWS_DEFAULT_REGION="us-east-1"
@@ -32,8 +32,7 @@ jobs:
       install:
         - npm install -g serverless
         - npm install
-      script: skip
-      before_deploy:
+      script:
         - sls package -v -s dev -r us-east-1 -p $DIST_DIR
         - cp serverless.yml $DIST_DIR
         # python-requirements directory
@@ -47,6 +46,7 @@ jobs:
           acl: private
           on:
             repo: "$TRAVIS_REPO_SLUG"
+            all_branches: true
           access_key_id: "$AWS_ACCESS_KEY_ID"
           secret_access_key: "$AWS_SECRET_ACCESS_KEY"
 
@@ -54,20 +54,13 @@ jobs:
       language: python
       python: '3.6'
       install:
-        - npm install -g serverless
-        - npm install
         - pip install awscli
-      script: skip
-      before_deploy:
+      script:
         # We reuse the artifacts from the build stage which we place into tmp.
-        - mkdir tmp
-        - aws s3 cp s3://${S3_BUCKET}/${S3_BUILD_PREFIX}/${PROJECT_NAME}.zip ./
-        - aws s3 cp s3://${S3_BUCKET}/${S3_BUILD_PREFIX}/serverless.yml ./tmp/
-        - unzip ${PROJECT_NAME}.zip -d tmp
-        - cd tmp
         - mkdir $DIST_DIR
-        - cp ../${PROJECT_NAME}.zip $DIST_DIR
-        - sls sam export --output ${DIST_DIR}/${AWS_SAM_TMPL_NAME} --codeuri s3://${S3_BUCKET}/${S3_DEPLOY_ARTIFACT}
+        - aws s3 cp s3://${S3_BUCKET}/${S3_BUILD_PREFIX}/${PROJECT_NAME}.zip ${DIST_DIR}/
+        - cp ${AWS_SAM_TMPL_NAME} ${DIST_DIR}
+        - sed -i'' -e "s,%%S3_BUCKET%%,${S3_BUCKET}," -e "s,%%S3_DEPLOY_ARTIFACT%%,${S3_DEPLOY_ARTIFACT}," ${DIST_DIR}/${AWS_SAM_TMPL_NAME}
         - aws cloudformation package --template-file ${DIST_DIR}/${AWS_SAM_TMPL_NAME} --output-template-file ${DIST_DIR}/${AWS_CFN_TMPL_NAME} --s3-bucket ${S3_BUCKET} --s3-prefix ${S3_DEPLOY_PREFIX}
       deploy:
         - provider: s3

@@ -33,32 +33,6 @@ provider:
   stage: ${self:custom.stage}
 
 functions:
-  S3Decompress:
-    handler: handlers/s3-decompress.handler
-    description: "Decompress an S3 object and publish contents to an S3 bucket temporarily for processing."
-    runtime: python3.6
-    memorySize: 256
-    timeout: 300
-    environment:
-      LOG_LEVEL: ${self:custom.log_level}
-      DECOMPRESS_S3_BUCKET_NAME:
-        Ref: 'S3BucketAwsadm${self:provider.stage}stateAWSAccountId'
-    iamRoleStatements:
-      - Effect: "Allow"
-        Action:
-          - "S3:GetObject"
-        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}/*"
-      - Effect: "Allow"
-        Action:
-          - "S3:PutObject"
-        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-state-#{AWS::AccountId}/*"
-    events:
-      - s3:
-          bucket: "${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}"   # S3BucketAWSAccountIdbillingreportsprime
-          event: "s3:ObjectCreated:Put"
-          rules:
-            - suffix: ".gz"
-
   LineItemPublish:
     handler: handlers/line-item-publisher.handler
     description: "Ingest an S3 object and publish line items."
@@ -75,13 +49,12 @@ functions:
       - Effect: "Allow"
         Action:
           - "s3:ListBucket"
-        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-state-#{AWS::AccountId}"
+        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}"
       - Effect: "Allow"
         Action:
           - "S3:GetObject"
           - "S3:PutObject"
-          - "S3:DeleteObject"
-        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-state-#{AWS::AccountId}/*"
+        Resource: "arn:aws:s3:::${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}/*"
       - Effect: "Allow"
         Action:
           - "SNS:Publish"
@@ -93,10 +66,17 @@ functions:
         Resource: "arn:aws:lambda:${self:provider.region}:#{AWS::AccountId}:function:${self:service}-${self:provider.stage}-LineItemPublish"
     events:
       - s3:
-          bucket: "${self:service}-${self:provider.stage}-state-#{AWS::AccountId}"       # S3BucketAWSAccountIdstateprime
+          # NOTE: Need to use string here.
+          bucket: '${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}'
           event: "s3:ObjectCreated:Put"
           rules:
-            - suffix: ".csv"
+            - suffix: ".gz"
+      - s3:
+          # NOTE: Need to use string here.
+          bucket: '${self:service}-${self:provider.stage}-billing-reports-#{AWS::AccountId}'
+          event: "s3:ObjectCreated:Put"
+          rules:
+            - suffix: ".zip"
 
 
 resources:
@@ -191,6 +171,7 @@ resources:
           ]
         }
 
+
   Outputs:
     BillingReportS3BucketName:
       Description: "S3 bucket where billing reports are delivered to."
@@ -198,14 +179,6 @@ resources:
         Ref: 'S3BucketAwsadm${self:provider.stage}billingreportsAWSAccountId'
       Export:
         Name: "${self:service}-${self:provider.stage}-BillingReportS3BucketName"
-
-    AdmStateS3BucketName:
-      Description: "S3 bucket where reports are decompressed and state is saved."
-      Value:
-        Ref: 'S3BucketAwsadm${self:provider.stage}stateAWSAccountId'
-      Export:
-        Name: "${self:service}-${self:provider.stage}-AdmStateS3BucketName"
-
     BillingRecordsSnsTopicArn:
       Description: "SNS topic ARN where billing records are published to."
       Value:

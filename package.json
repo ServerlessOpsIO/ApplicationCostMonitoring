@@ -6,6 +6,7 @@
     "serverless-iam-roles-per-function": "^0.1.2",
     "serverless-pseudo-parameters": "^1.3.2",
     "serverless-python-requirements": "^3.3.0",
-    "serverless-sam": "0.0.4"
+    "serverless-sam": "0.0.4",
+    "serverless-plugin-existing-s3": "^2.0.3"
   }
 }
