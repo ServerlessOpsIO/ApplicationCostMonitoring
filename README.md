@@ -8,6 +8,7 @@ Application Cost Monitoring provides granular AWS spend tracking.
 Using the AWS Cost and Usage report this system will parse the report and feed the line items to a place where you can perform analysis.  This service only handles the billing report ingestion, parsing, and publishing to SNS.  Additional publisher services need to be deployed. eg.
 
 * [ACM-S3-Publisher](https://github.com/ServerlessOpsIO/ACM-S3-Publisher)
+* [ACM-DynamoDB-Publisher](https://github.com/ServerlessOpsIO/ACM-DynamoDB-Publisher)
 
 ![System Architecture](/diagram.png?raw=true "System Architecture")
 
@@ -67,4 +68,5 @@ Options:
 This service only handles billing report ingestion and parsing.  It requires an additional publisher service to be useful.  Available ones are:
 
 * [ACM-S3-Publisher](https://github.com/ServerlessOpsIO/ACM-S3-Publisher)
+* [ACM-DynamoDB-Publisher](https://github.com/ServerlessOpsIO/ACM-DynamoDB-Publisher)
 
