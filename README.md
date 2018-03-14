@@ -9,7 +9,7 @@ Using the AWS Cost and Usage report this system will parse the report and feed t
 
 * [ACM-S3-Publisher](https://github.com/ServerlessOpsIO/ACM-S3-Publisher)
 
-![System Architecture](/AWS%20ADM%20Diagram.png?raw=true "System Architecture")
+![System Architecture](/diagram.png?raw=true "System Architecture")
 
 ## Deployment
 Read through the entire documentation first.  There is information in setting up the billing report that may influence your deployment.
