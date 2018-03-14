@@ -24,7 +24,7 @@ Resources:
             TopicName:
               Fn::GetAtt:
                 - BillingRecordsSnsTopic
-                - Arn
+                - TopicName
         - LambdaInvokePolicy:
             # NOTE: We can't Ref Stack name when publishing to AppRepo
             FunctionName: 'aws-serverless-repository-ApplicationCostMonitoring-Publish'
