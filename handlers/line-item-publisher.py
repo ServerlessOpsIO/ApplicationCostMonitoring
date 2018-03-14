@@ -144,8 +144,8 @@ def _get_line_items_from_s3(s3_bucket, s3_key):
     s3_object_body_decompressed = _decompress_s3_object_body(s3_object_body, s3_key)
     s3_body_file = io.StringIO(s3_object_body_decompressed)
 
-    line_item_headers = s3_body_file.readline().split(',')
-    line_items = s3_body_file.readlines()
+    line_item_headers = s3_body_file.readline().strip().split(',')
+    line_items = s3_body_file.read().splitlines()
 
     return (line_item_headers, line_items)
 
@@ -280,8 +280,7 @@ def handler(event, context):
     for line_item in line_items:
         _logger.debug('line_item: {}'.format(line_item))
 
-        stripped_line_item = line_item.strip()
-        line_item_msg = _create_line_item_message(line_item_headers, stripped_line_item)
+        line_item_msg = _create_line_item_message(line_item_headers, line_item)
         _logger.debug('message: {}'.format(json.dumps(line_item_msg)))
 
         line_item_start, line_item_end = _get_line_item_time_interval(line_item_msg)
