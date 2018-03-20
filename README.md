@@ -12,6 +12,11 @@ Using the AWS Cost and Usage report this system will parse the report and feed t
 
 ![System Architecture](/diagram.png?raw=true "System Architecture")
 
+## Background
+Read why we released Application Cost Monitoring as independent nanoservices as opposed to a single application along with our thoughts on using nanoservices to build serverless applications:
+
+* [Rise Of The Nanoservice](https://www.serverlessops.io/blog/rise-of-the-nanoservice)
+
 ## Deployment
 Read through the entire documentation first.  There is information in setting up the billing report that may influence your deployment.
 
