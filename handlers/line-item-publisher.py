@@ -1,6 +1,7 @@
 '''Fetch object from S3 and publish items to SNS'''
 
 import boto3
+import csv
 import gzip
 import io
 import iso8601
@@ -100,7 +101,7 @@ def _convert_empty_value_to_none(item):
 
 def _create_line_item_message(headers, line_item):
     '''Return a formatted line item message.'''
-    split_line_item = line_item.split(',')
+    split_line_item = next(csv.reader([line_item]))
     item_dict = dict(zip(headers, split_line_item))
     sanitized_item_dict = _convert_empty_value_to_none(item_dict)
 
