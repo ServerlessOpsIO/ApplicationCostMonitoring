@@ -30,6 +30,10 @@ provider:
   name: aws
   profile: ${self:custom.profile}
   stage: ${self:custom.stage}
+  stackTags:
+    x-service: ${self:service}
+    x-stack: ${self:service}-${self:provider.stage}
+    x-app: ApplicationCostMonitoring
 
 functions:
   Publish:
